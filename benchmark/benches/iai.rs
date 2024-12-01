@@ -6,4 +6,5 @@ macro_rules! doit {
 }
 
 doit!(
+    day01: day01_solve,
 );
