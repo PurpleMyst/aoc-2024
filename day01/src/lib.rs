@@ -4,25 +4,22 @@ use std::{fmt::Display, iter::zip};
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
 
-    let mut l = Vec::new();
-    let mut r = Vec::new();
-    input
+    let (mut left, mut right): (Vec<u32>, Vec<u32>) = input
         .lines()
         .map(|line| line.split_once(' ').unwrap())
-        .for_each(|(a, b)| {
-            l.push(a.trim().parse::<i64>().unwrap());
-            r.push(b.trim().parse::<i64>().unwrap());
-        });
+        .map(|(a, b)| (a.parse::<u32>().unwrap(), b.trim().parse::<u32>().unwrap()))
+        .unzip();
 
-    l.sort_unstable();
-    r.sort_unstable();
+    left.sort_unstable();
+    right.sort_unstable();
 
-    let p1 = zip(l.iter(), r.iter()).map(|(a, b)| (a - b).abs()).sum::<i64>();
+    let p1 = zip(left.iter(), right.iter())
+        .map(|(&a, &b)| a.abs_diff(b))
+        .sum::<u32>();
 
-    let p2 = l
-        .iter()
-        .map(|n| n * r.iter().filter(|&m| n == m).count() as i64)
-        .sum::<i64>();
+    let mut freq = vec![0; 100_000];
+    right.iter().for_each(|&n| freq[n as usize] += 1);
+    let p2 = left.iter().map(|n| n * freq[*n as usize]).sum::<u32>();
 
     (p1, p2)
 }
