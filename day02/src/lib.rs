@@ -1,0 +1,38 @@
+use std::fmt::Display;
+
+fn is_safe(report: &[u8]) -> bool {
+    let cond1 = report.windows(2).all(|w| w[0] <= w[1]) || report.windows(2).all(|w| w[0] >= w[1]);
+
+    let cond2 = report.windows(2).all(|w| {
+        let d = w[0].abs_diff(w[1]);
+        d >= 1 && d <= 3
+    });
+
+    cond1 && cond2
+}
+
+#[inline]
+pub fn solve() -> (impl Display, impl Display) {
+    let input = include_str!("input.txt");
+
+    let reports = input
+        .lines()
+        .map(|line| line.split(' ').map(|n| n.parse::<u8>().unwrap()).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+
+    let p1 = reports.iter().filter(|report| is_safe(report)).count();
+
+    let p2 = reports
+        .into_iter()
+        .filter(|report| {
+            is_safe(report)
+                || (0..report.len()).any(|i| {
+                    let mut r = report.clone();
+                    r.remove(i);
+                    is_safe(&r)
+                })
+        })
+        .count();
+
+    (p1, p2)
+}
