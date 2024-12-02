@@ -1,5 +1,8 @@
 use std::fmt::Display;
 
+use arrayvec::ArrayVec;
+use rayon::prelude::*;
+
 fn is_safe(report: &[u8]) -> bool {
     let cond1 = report.windows(2).all(|w| w[0] <= w[1]) || report.windows(2).all(|w| w[0] >= w[1]);
 
@@ -16,14 +19,14 @@ pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
 
     let reports = input
-        .lines()
-        .map(|line| line.split(' ').map(|n| n.parse::<u8>().unwrap()).collect::<Vec<_>>())
+        .par_lines()
+        .map(|line| line.split(' ').map(|n| n.parse::<u8>().unwrap()).collect::<ArrayVec<_, 8>>())
         .collect::<Vec<_>>();
 
-    let p1 = reports.iter().filter(|report| is_safe(report)).count();
+    let p1 = reports.par_iter().filter(|report| is_safe(report)).count();
 
     let p2 = reports
-        .into_iter()
+        .into_par_iter()
         .filter(|report| {
             is_safe(report)
                 || (0..report.len()).any(|i| {
