@@ -30,4 +30,5 @@ macro_rules! doit {
 doit!(
     day01,
     day02,
+    day03,
 );
