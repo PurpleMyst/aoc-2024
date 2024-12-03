@@ -20,7 +20,11 @@ pub fn solve() -> (impl Display, impl Display) {
 
     let reports = input
         .par_lines()
-        .map(|line| line.split(' ').map(|n| n.parse::<u8>().unwrap()).collect::<ArrayVec<_, 8>>())
+        .map(|line| {
+            line.split(' ')
+                .map(|n| n.parse::<u8>().unwrap())
+                .collect::<ArrayVec<_, 8>>()
+        })
         .collect::<Vec<_>>();
 
     let p1 = reports.par_iter().filter(|report| is_safe(report)).count();
