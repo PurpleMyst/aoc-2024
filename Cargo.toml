@@ -1,5 +1,5 @@
 [workspace]
-members = [ "benchmark", "day01", "day02", "day03" ]
+members = [ "benchmark", "day01", "day02", "day03", "day04" ]
 resolver = "2"
 
 [workspace.metadata.day01]
@@ -13,3 +13,7 @@ completion_time = 2024-12-02T16:08:12.318737
 [workspace.metadata.day03]
 start_time = 2024-12-03T11:28:32.154194
 completion_time = 2024-12-03T11:33:10.068000
+
+[workspace.metadata.day04]
+start_time = 2024-12-04T11:20:11.268931
+completion_time = 2024-12-04T11:44:36.209563
