@@ -190,6 +190,7 @@ name = "day04"
 version = "0.1.0"
 dependencies = [
  "grid",
+ "rayon",
 ]
 
 [[package]]
