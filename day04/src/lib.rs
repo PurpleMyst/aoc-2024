@@ -1,6 +1,10 @@
 use std::fmt::Display;
 
 use grid::Grid;
+use rayon::prelude::*;
+
+const MAS: &[u8] = b"MAS";
+const DIRECTIONS: [(isize, isize); 8] = [(0, -1), (0, 1), (-1, 0), (1, 0), (1, 1), (-1, 1), (-1, -1), (1, -1)];
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
@@ -11,6 +15,26 @@ pub fn solve() -> (impl Display, impl Display) {
     );
 
     rayon::join(|| solve_part1(&grid), || solve_part2(&grid))
+}
+
+fn solve_part1(grid: &Grid<u8>) -> usize {
+    DIRECTIONS
+        .into_par_iter()
+        .map(|dir| {
+            grid.indexed_iter()
+                .filter(|(_, &c)| c == b'X')
+                .filter(|&((y, x), _)| {
+                    (0..MAS.len())
+                        .scan((y, x), |(y, x), _| {
+                            *y = y.checked_add_signed(dir.0)?;
+                            *x = x.checked_add_signed(dir.1)?;
+                            grid.get(*y, *x)
+                        })
+                        .eq(MAS)
+                })
+                .count()
+        })
+        .sum()
 }
 
 fn solve_part2(grid: &Grid<u8>) -> usize {
@@ -42,31 +66,4 @@ fn solve_part2(grid: &Grid<u8>) -> usize {
             do_count(first_diagonal) == (1, 1) && do_count(second_diagonal) == (1, 1)
         })
         .count()
-}
-
-fn solve_part1(grid: &Grid<u8>) -> usize {
-    grid.indexed_iter()
-        .filter(|(_, &c)| c == b'X')
-        .map(|((y, x), _)| {
-            let options: [[_; 3]; 8] = [
-                std::array::from_fn(|i| (Some(y), x.checked_sub(i + 1))),
-                std::array::from_fn(|i| (Some(y), x.checked_add(i + 1))),
-                std::array::from_fn(|i| (y.checked_sub(i + 1), Some(x))),
-                std::array::from_fn(|i| (y.checked_add(i + 1), Some(x))),
-                std::array::from_fn(|i| (y.checked_sub(i + 1), x.checked_sub(i + 1))),
-                std::array::from_fn(|i| (y.checked_add(i + 1), x.checked_add(i + 1))),
-                std::array::from_fn(|i| (y.checked_sub(i + 1), x.checked_add(i + 1))),
-                std::array::from_fn(|i| (y.checked_add(i + 1), x.checked_sub(i + 1))),
-            ];
-
-            options
-                .into_iter()
-                .filter(|path| {
-                    path.iter()
-                        .zip(b"MAS")
-                        .all(|((y, x), c)| y.zip(*x).and_then(|(y, x)| grid.get(y, x)) == Some(c))
-                })
-                .count()
-        })
-        .sum::<usize>()
 }
