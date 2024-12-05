@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use rayon::prelude::*;
+
 struct Order {
     map: [u128; 100],
 }
@@ -37,24 +39,24 @@ pub fn solve() -> (impl Display, impl Display) {
         .for_each(|(before, after)| order.add(before, after));
 
     let updates = updates
-        .lines()
+        .par_lines()
         .map(|update| update.split(',').map(|x| x.parse::<u8>().unwrap()).collect::<Vec<_>>());
 
-    let mut p1 = 0u16;
-    let mut p2 = 0u16;
-
-    for update in updates {
-        let midpoint = update.len() / 2;
-        if update.is_sorted_by(|&n, &m| order.contains(n, m)) {
-            p1 += update[midpoint] as u16;
-        } else {
-            p2 += update
-                .iter()
-                .copied()
-                .find(|&n| update.iter().filter(|&&m| order.contains(m, n)).count() == midpoint)
-                .unwrap() as u16;
-        }
-    }
-
-    (p1, p2)
+    updates
+        .map(|update| {
+            let midpoint = update.len() / 2;
+            if update.is_sorted_by(|&n, &m| order.contains(n, m)) {
+                (update[midpoint] as u16, 0)
+            } else {
+                (
+                    0,
+                    update
+                        .iter()
+                        .copied()
+                        .find(|&n| update.iter().filter(|&&m| order.contains(m, n)).count() == midpoint)
+                        .unwrap() as u16,
+                )
+            }
+        })
+        .reduce(|| (0, 0), |(a, b), (c, d)| (a + c, b + d))
 }
