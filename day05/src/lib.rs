@@ -44,32 +44,17 @@ pub fn solve() -> (impl Display, impl Display) {
     let mut p2 = 0u16;
 
     for update in updates {
-        if is_ordered(&update, &order) {
-            p1 += update[update.len() / 2] as u16;
+        let midpoint = update.len() / 2;
+        if update.is_sorted_by(|&n, &m| order.contains(n, m)) {
+            p1 += update[midpoint] as u16;
         } else {
-            let l = update.len() / 2;
-            p2 += reorder(update, &order).nth(l).unwrap() as u16;
+            p2 += update
+                .iter()
+                .copied()
+                .find(|&n| update.iter().filter(|&&m| order.contains(m, n)).count() == midpoint)
+                .unwrap() as u16;
         }
     }
 
     (p1, p2)
-}
-
-fn is_ordered(update: &[u8], order: &Order) -> bool {
-    update
-        .iter()
-        .copied()
-        .enumerate()
-        .all(|(i, n)| !update[..i].iter().copied().any(|m| order.contains(n, m)))
-}
-
-fn reorder(mut update: Vec<u8>, order: &Order) -> impl Iterator<Item = u8> + '_ {
-    std::iter::from_fn(move || {
-        let next = update
-            .iter()
-            .copied()
-            .position(|n| !update.iter().copied().any(|m| order.contains(m, n)))
-            .expect("circular dependency");
-        Some(update.swap_remove(next))
-    })
 }
