@@ -4,7 +4,7 @@ use std::fmt::Display;
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
 
-    let re2 = regex::Regex::new(r"do\(\)|don't\(\)|mul\((\d+),(\d+)\)").unwrap();
+    let re2 = regex::Regex::new(r"do\(\)|don't\(\)|mul\(([0-9]{1,3}),([0-9]{1,3})\)").unwrap();
 
     let mut p1 = 0;
     let mut p2 = 0;
