@@ -1,6 +1,8 @@
 target/
 session.txt
 sample_input*.txt
+input.txt
+problem.md
 *.png
 *.dot
 *.log
