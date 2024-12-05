@@ -58,7 +58,9 @@ WORKSPACE_MANIFEST_PATH = Path(__file__).parent / "Cargo.toml"
 
 NOW = datetime.now()
 
-DAYS_LEFT = set(range(1, 26)) - {int(p.name[len("day") :]) for p in Path(__file__).parent.glob("day*")}
+DAYS_LEFT = set(range(1, 26)) - {
+    int(p.name[len("day") :]) for p in Path(__file__).parent.glob("day*")
+}
 
 YEAR = toml.parse(WORKSPACE_MANIFEST_PATH.read_text()).get("metadata", {}).get("year", NOW.year)
 
@@ -102,6 +104,19 @@ def in_root_dir(f):
         return f(*args, **kwargs)
 
     return inner
+
+
+@wrap_errors((requests.HTTPError,))
+def refetch_inputs() -> None:
+    "Fetch the inputs that aren't present locally, since they cannot be stored in the repo."
+    for day in Path().glob("day*"):
+        input_path = day / "src" / "input.txt"
+        if input_path.exists():
+            continue
+        day_num = int(day.name.removeprefix("day"))
+        resp = session.get(f"https://adventofcode.com/{YEAR}/day/{day_num}/input")
+        resp.raise_for_status()
+        input_path.write_text(resp.text, newline="\n")
 
 
 @arg("-d", "--day", choices=DAYS_LEFT, default=min(DAYS_LEFT, default=0), required=False)
@@ -407,6 +422,7 @@ def main() -> None:
             measure_completion_time,
             set_completion_time,
             flamegraph,
+            refetch_inputs,
         ),
     )
 
