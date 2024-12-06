@@ -1,8 +1,12 @@
 use std::fmt::Display;
 
+use hibitset::BitSet;
 use rayon::prelude::*;
 
-const DIRECTIONS: [(isize, isize); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+// Directions, ordered clockwise and as (dy, dx) tuples starting from "up".
+// We're utilizing 16-bit integers as positions to be faster and more memory efficient.
+// For whatever reason, using 8-bit integers is slower. \_(ツ)_/
+const DIRECTIONS: [(i16, i16); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
@@ -11,29 +15,45 @@ pub fn solve() -> (impl Display, impl Display) {
         input.bytes().filter(|&b| b != b'\n').collect(),
         input.lines().next().unwrap().len(),
     );
+    debug_assert_eq!(map.rows(), map.cols());
+    let side = map.cols() as u16;
+    debug_assert!(side < u16::MAX);
 
+    // Find the starting position.
     let (start_pos, _) = map.indexed_iter().find(|&(_, &c)| c == b'^').unwrap();
+    let start_pos = (start_pos.0 as u16, start_pos.1 as u16);
 
-    let w = map.cols();
-    let map = grid::Grid::from_vec(
-        map.into_vec().into_iter().map(|c| c == b'#').collect(),
-        w,
-    );
+    // Convert the map into a bitset of walls for faster lookup.
+    let mut walls = BitSet::with_capacity(side as u32 * side as u32);
+    for (pos, &c) in map.indexed_iter() {
+        if c == b'#' {
+            walls.add((pos.0 * map.cols() + pos.1) as u32);
+        }
+    }
 
-    let mut p1_visited = do_solve(&map, start_pos).0;
-    let p1 = p1_visited.iter().filter(|&&v| v != 0).count();
+    // Walk the walk for part 1.
+    let p1_visiteds = do_solve(&walls, side, start_pos).0;
 
+    // We've got a bitset for each direction, but we need to combine them into one for part one.
+    let (first, rest) = p1_visiteds.split_first().unwrap();
+    let mut p1_visited = first.clone();
+    for visited in rest {
+        p1_visited |= visited;
+    }
+    let p1 = p1_visited.layer0_as_slice().iter().map(|n| n.count_ones()).sum::<u32>();
+
+    // Let's move on to part 2.
     // We'll utilize the visited map for part one as candidates for obstacles; since the problem text specifies the
     // start is not an option, we'll just set remove it from consdieration.
-    p1_visited[start_pos] = 0;
-    let p2 = p1_visited
-        .indexed_iter()
-        .par_bridge()
-        .filter(|&(_, &v)| v != 0)
-        .filter(|(pos, _)| {
-            let mut new_map = map.clone();
-            new_map[*pos] = true;
-            let (_, enters_loop) = do_solve(&new_map, start_pos);
+    p1_visited.remove((start_pos.0 * side + start_pos.1) as u32);
+    let p2 = (0..side)
+        .into_par_iter()
+        .flat_map(|y| (0..side).into_par_iter().map(move |x| (y, x)))
+        .filter(|(y, x)| p1_visited.contains((y * side + x) as u32))
+        .filter(|(y, x)| {
+            let mut new_walls = walls.clone();
+            new_walls.add((y * side + x) as u32);
+            let (_, enters_loop) = do_solve(&new_walls, side, start_pos);
             enters_loop
         })
         .count();
@@ -41,26 +61,33 @@ pub fn solve() -> (impl Display, impl Display) {
     (p1, p2)
 }
 
-fn do_solve(map: &grid::Grid<bool>, mut pos: (usize, usize)) -> (grid::Grid<u8>, bool) {
-    let mut visited = grid::Grid::new(map.rows(), map.cols());
-    visited.fill(0u8);
+fn do_solve(walls: &BitSet, side: u16, (mut y, mut x): (u16, u16)) -> ([BitSet; 4], bool) {
+    let mut visiteds: [_; 4] = std::array::from_fn(|_| BitSet::new());
 
     loop {
-        for (dir, (dy, dx)) in DIRECTIONS.into_iter().enumerate() {
-            let mask = 1 << dir;
+        for ((dy, dx), visited) in DIRECTIONS.into_iter().zip(&mut visiteds) {
             loop {
-                if visited[pos] & mask != 0 {
-                    return (visited, true);
+                let idx = (y * side + x) as u32;
+                if visited.contains(idx) {
+                    return (visiteds, true);
                 }
-                visited[pos] |= mask;
-                let new_pos = pos.0.checked_add_signed(dy).zip(pos.1.checked_add_signed(dx));
-                match new_pos.and_then(|p| map.get(p.0, p.1)) {
-                    Some(true) => {
-                        break;
-                    }
-                    Some(false) => pos = new_pos.unwrap(),
-                    None => return (visited, false),
+                visited.add(idx);
+
+                // Move into the new direction, checking if we go out of bounds.
+                // We're abusing wrapping here, since 0 - 1 = u16::MAX, so we're also implicitly assuming side to be way
+                // smaller than that. Which is true.
+                let new_y = y.wrapping_add_signed(dy);
+                let new_x = x.wrapping_add_signed(dx);
+                if new_y >= side || new_x >= side {
+                    return (visiteds, false);
                 }
+
+                if walls.contains((new_y * side + new_x) as u32) {
+                    break;
+                }
+
+                y = new_y;
+                x = new_x;
             }
         }
     }
