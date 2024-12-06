@@ -14,17 +14,16 @@ pub fn solve() -> (impl Display, impl Display) {
 
     let (start_pos, _) = map.indexed_iter().find(|&(_, &c)| c == b'^').unwrap();
 
-    let p1 = do_solve(&map, start_pos)
-        .0
-        .into_vec()
-        .into_iter()
-        .filter(|&v| v != 0)
-        .count();
+    let mut p1_visited = do_solve(&map, start_pos).0;
+    let p1 = p1_visited.iter().filter(|&&v| v != 0).count();
 
-    let p2 = map
+    // We'll utilize the visited map for part one as candidates for obstacles; since the problem text specifies the
+    // start is not an option, we'll just set remove it from consdieration.
+    p1_visited[start_pos] = 0;
+    let p2 = p1_visited
         .indexed_iter()
         .par_bridge()
-        .filter(|&(_, &c)| c == b'.')
+        .filter(|&(_, &v)| v != 0)
         .filter(|(pos, _)| {
             let mut new_map = map.clone();
             new_map[*pos] = b'#';
