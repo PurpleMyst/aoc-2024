@@ -21,6 +21,7 @@ dependencies = [
  "day03",
  "day04",
  "day05",
+ "day06",
  "iai",
 ]
 
@@ -198,6 +199,14 @@ dependencies = [
 name = "day05"
 version = "0.1.0"
 dependencies = [
+ "rayon",
+]
+
+[[package]]
+name = "day06"
+version = "0.1.0"
+dependencies = [
+ "grid",
  "rayon",
 ]
 
