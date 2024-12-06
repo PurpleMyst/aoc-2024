@@ -14,6 +14,12 @@ pub fn solve() -> (impl Display, impl Display) {
 
     let (start_pos, _) = map.indexed_iter().find(|&(_, &c)| c == b'^').unwrap();
 
+    let w = map.cols();
+    let map = grid::Grid::from_vec(
+        map.into_vec().into_iter().map(|c| c == b'#').collect(),
+        w,
+    );
+
     let mut p1_visited = do_solve(&map, start_pos).0;
     let p1 = p1_visited.iter().filter(|&&v| v != 0).count();
 
@@ -26,7 +32,7 @@ pub fn solve() -> (impl Display, impl Display) {
         .filter(|&(_, &v)| v != 0)
         .filter(|(pos, _)| {
             let mut new_map = map.clone();
-            new_map[*pos] = b'#';
+            new_map[*pos] = true;
             let (_, enters_loop) = do_solve(&new_map, start_pos);
             enters_loop
         })
@@ -35,7 +41,7 @@ pub fn solve() -> (impl Display, impl Display) {
     (p1, p2)
 }
 
-fn do_solve(map: &grid::Grid<u8>, mut pos: (usize, usize)) -> (grid::Grid<u8>, bool) {
+fn do_solve(map: &grid::Grid<bool>, mut pos: (usize, usize)) -> (grid::Grid<u8>, bool) {
     let mut visited = grid::Grid::new(map.rows(), map.cols());
     visited.fill(0u8);
 
@@ -49,10 +55,10 @@ fn do_solve(map: &grid::Grid<u8>, mut pos: (usize, usize)) -> (grid::Grid<u8>, b
                 visited[pos] |= mask;
                 let new_pos = pos.0.checked_add_signed(dy).zip(pos.1.checked_add_signed(dx));
                 match new_pos.and_then(|p| map.get(p.0, p.1)) {
-                    Some(b'#') => {
+                    Some(true) => {
                         break;
                     }
-                    Some(..) => pos = new_pos.unwrap(),
+                    Some(false) => pos = new_pos.unwrap(),
                     None => return (visited, false),
                 }
             }
