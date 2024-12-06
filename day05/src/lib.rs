@@ -51,9 +51,9 @@ pub fn solve() -> (impl Display, impl Display) {
                 (
                     0,
                     update
-                        .iter()
+                        .par_iter()
                         .copied()
-                        .find(|&n| update.iter().filter(|&&m| order.contains(m, n)).count() == midpoint)
+                        .find_any(|&n| update.iter().filter(|&&m| order.contains(m, n)).count() == midpoint)
                         .unwrap() as u16,
                 )
             }
