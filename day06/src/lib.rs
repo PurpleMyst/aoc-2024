@@ -32,10 +32,10 @@ pub fn solve() -> (impl Display, impl Display) {
     }
 
     // Walk the walk for part 1.
-    let p1_visiteds = do_solve(&walls, side, start_pos).0;
+    let p1_visited_by_dir = do_solve(&walls, side, start_pos).0;
 
     // We've got a bitset for each direction, but we need to combine them into one for part one.
-    let (first, rest) = p1_visiteds.split_first().unwrap();
+    let (first, rest) = p1_visited_by_dir.split_first().unwrap();
     let mut p1_visited = first.clone();
     for visited in rest {
         p1_visited |= visited;
@@ -61,15 +61,15 @@ pub fn solve() -> (impl Display, impl Display) {
     (p1, p2)
 }
 
-fn do_solve(walls: &BitSet, side: u16, (mut y, mut x): (u16, u16)) -> ([BitSet; 4], bool) {
-    let mut visiteds: [_; 4] = std::array::from_fn(|_| BitSet::new());
+fn do_solve(walls: &BitSet, side: u16, (mut y, mut x): (u16, u16)) -> ([BitSet; DIRECTIONS.len()], bool) {
+    let mut visited_by_dir: [_; DIRECTIONS.len()] = std::array::from_fn(|_| BitSet::new());
 
     loop {
-        for ((dy, dx), visited) in DIRECTIONS.into_iter().zip(&mut visiteds) {
+        for ((dy, dx), visited) in DIRECTIONS.into_iter().zip(&mut visited_by_dir) {
             loop {
                 let idx = (y * side + x) as u32;
                 if visited.contains(idx) {
-                    return (visiteds, true);
+                    return (visited_by_dir, true);
                 }
                 visited.add(idx);
 
@@ -79,7 +79,7 @@ fn do_solve(walls: &BitSet, side: u16, (mut y, mut x): (u16, u16)) -> ([BitSet; 
                 let new_y = y.wrapping_add_signed(dy);
                 let new_x = x.wrapping_add_signed(dx);
                 if new_y >= side || new_x >= side {
-                    return (visiteds, false);
+                    return (visited_by_dir, false);
                 }
 
                 if walls.contains((new_y * side + new_x) as u32) {
