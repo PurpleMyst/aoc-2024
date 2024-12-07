@@ -22,6 +22,7 @@ dependencies = [
  "day04",
  "day05",
  "day06",
+ "day07",
  "iai",
 ]
 
@@ -210,6 +211,10 @@ dependencies = [
  "hibitset",
  "rayon",
 ]
+
+[[package]]
+name = "day07"
+version = "0.1.0"
 
 [[package]]
 name = "either"
