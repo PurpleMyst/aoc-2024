@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
 use rayon::prelude::*;
 
@@ -43,18 +43,16 @@ pub fn solve() -> (impl Display, impl Display) {
         .map(|update| update.split(',').map(|x| x.parse::<u8>().unwrap()).collect::<Vec<_>>());
 
     updates
-        .map(|update| {
+        .map(|mut update| {
             let midpoint = update.len() / 2;
             if update.is_sorted_by(|&n, &m| order.contains(n, m)) {
                 (update[midpoint] as u16, 0)
             } else {
                 (
                     0,
-                    update
-                        .par_iter()
-                        .copied()
-                        .find_any(|&n| update.iter().filter(|&&m| order.contains(m, n)).count() == midpoint)
-                        .unwrap() as u16,
+                    *update
+                        .select_nth_unstable_by(midpoint, |&n, &m| if order.contains(n, m) { Ordering::Less } else { Ordering::Greater })
+                        .1 as u16
                 )
             }
         })
