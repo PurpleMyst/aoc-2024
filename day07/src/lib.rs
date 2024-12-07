@@ -1,5 +1,7 @@
 use std::{fmt::Display, mem::swap};
 
+use rayon::prelude::*;
+
 fn concat(a: u64, ob: u64) -> u64 {
     let mut b = ob;
     let mut c = 1;
@@ -14,20 +16,19 @@ fn concat(a: u64, ob: u64) -> u64 {
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
 
-    let p1 = do_solve(input, |state, v| [state + v, state * v]);
-
-    let p2 = do_solve(input, |state, v| [state + v, state * v, concat(state, v)]);
-
-    (p1, p2)
+    rayon::join(
+        || do_solve(input, |state, v| [state + v, state * v]),
+        || do_solve(input, |state, v| [state + v, state * v, concat(state, v)]),
+    )
 }
 
 fn do_solve<F, I>(input: &str, f: F) -> u64
 where
-    F: Fn(u64, u64) -> I,
+    F: Fn(u64, u64) -> I + Sync,
     I: IntoIterator<Item = u64>,
 {
-    let p1 = input
-        .lines()
+    input
+        .par_lines()
         .filter_map(|line| {
             let (target, values) = line.split_once(": ").unwrap();
             let target = target.parse::<u64>().unwrap();
@@ -44,8 +45,7 @@ where
 
             states.into_iter().any(|s| s == target).then_some(target)
         })
-        .sum::<u64>();
-    p1
+        .sum::<u64>()
 }
 
 #[cfg(test)]
