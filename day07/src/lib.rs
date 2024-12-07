@@ -39,7 +39,7 @@ where
 
             for v in values {
                 next_states.clear();
-                next_states.extend(states.drain(..).flat_map(|state| f(state, v)));
+                next_states.extend(states.drain(..).flat_map(|state| f(state, v)).filter(|&s| s <= target));
                 swap(&mut states, &mut next_states);
             }
 
