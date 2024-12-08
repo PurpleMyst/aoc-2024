@@ -8,7 +8,7 @@ fn is_safe(report: &[u8]) -> bool {
 
     let cond2 = report.windows(2).all(|w| {
         let d = w[0].abs_diff(w[1]);
-        d >= 1 && d <= 3
+        (1..=3).contains(&d)
     });
 
     cond1 && cond2
