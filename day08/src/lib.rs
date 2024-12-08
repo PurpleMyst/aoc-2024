@@ -1,23 +1,22 @@
 use std::fmt::Display;
 
-type Coord = isize;
+type Coord = i16;
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
 
-    let width = input.lines().next().unwrap().len();
-    let height = input.lines().count();
+    let side = input.lines().next().unwrap().len();
 
     let mut antennas_by_frequency = vec![vec![]; 256];
     input.bytes().filter(|&b| b != b'\n').enumerate().for_each(|(i, b)| {
         if b.is_ascii_alphanumeric() {
-            antennas_by_frequency[b as usize].push(((i / width) as Coord, (i % width) as Coord));
+            antennas_by_frequency[b as usize].push(((i / side) as Coord, (i % side) as Coord));
         }
     });
 
-    let mut antinodes_part1 = vec![false; width * height];
-    let mut antinodes_part2 = vec![false; width * height];
+    let mut antinodes_part1 = vec![0u64; side];
+    let mut antinodes_part2 = vec![0u64; side];
 
     for antennas in &antennas_by_frequency {
         for (y1, x1) in antennas.iter() {
@@ -32,12 +31,11 @@ pub fn solve() -> (impl Display, impl Display) {
                     let y0 = y1 + k * dy;
                     let x0 = x1 + k * dx;
 
-                    if (0..width as Coord).contains(&x0) && (0..height as Coord).contains(&y0) {
-                        let i0 = (y0 * width as Coord + x0) as usize;
+                    if (0..side as Coord).contains(&x0) && (0..side as Coord).contains(&y0) {
                         if k == 2 {
-                            antinodes_part1[i0] = true;
+                            antinodes_part1[y0 as usize] |= 1 << x0;
                         }
-                        antinodes_part2[i0] = true;
+                        antinodes_part2[y0 as usize] |= 1 << x0;
                     } else {
                         break;
                     }
@@ -47,7 +45,7 @@ pub fn solve() -> (impl Display, impl Display) {
     }
 
     (
-        antinodes_part1.into_iter().filter(|&b| b).count(),
-        antinodes_part2.into_iter().filter(|&b| b).count(),
+        antinodes_part1.into_iter().map(|n| n.count_ones()).sum::<u32>(),
+        antinodes_part2.into_iter().map(|n| n.count_ones()).sum::<u32>(),
     )
 }
