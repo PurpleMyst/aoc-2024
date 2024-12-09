@@ -2,29 +2,10 @@ use std::fmt::Display;
 
 use std::iter::repeat_n;
 
-fn generate_ansi_escape(input: usize) -> String {
-    use std::hash::*;
-
-    // Hash the input integer to generate a semi-random seed.
-    let mut hasher = DefaultHasher::new();
-    input.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    // Generate RGB values based on the hash.
-    let r = (hash & 0xFF) as u8; // Red
-    let g = ((hash >> 8) & 0xFF) as u8; // Green
-    let b = ((hash >> 16) & 0xFF) as u8; // Blue
-
-    // Create the ANSI escape sequence for RGB color.
-    format!("\x1b[38;2;{};{};{}m", r, g, b)
-}
-
-#[allow(dead_code)]
-fn show(fs: &[Option<usize>]) -> String {
-    fs.iter()
-        .map(|x| x.map_or(".".to_string(), |x| format!("{}{x}\x1b[0m", generate_ansi_escape(x))))
-        .collect::<Vec<String>>()
-        .join(",")
+#[derive(Debug, Clone, Copy)]
+struct ContiguousBlock {
+    file_id: Option<usize>,
+    len: usize,
 }
 
 #[inline]
@@ -46,36 +27,49 @@ pub fn solve() -> (impl Display, impl Display) {
         file_system.extend(repeat_n(Some(file_id), file as usize));
         file_system.extend(repeat_n(None, space as usize));
     }
-
     if free_spaces.len() > files.len() {
         file_system.extend(repeat_n(None, *free_spaces.last().unwrap() as usize));
     } else if files.len() > free_spaces.len() {
         file_system.extend(repeat_n(Some(files.len() - 1), *files.last().unwrap() as usize));
     }
 
-    let p1 = solve_part1(file_system.clone());
-    let p2 = solve_part2(files, file_system);
-    debug_assert!(p2 < 6478879023463);
+    let mut file_system_blocks = Vec::new();
+    for ((file_id, &file), &space) in files.iter().enumerate().zip(free_spaces.iter()) {
+        file_system_blocks.push(ContiguousBlock {
+            file_id: Some(file_id),
+            len: file as usize,
+        });
+        file_system_blocks.push(ContiguousBlock {
+            file_id: None,
+            len: space as usize,
+        });
+    }
+    if free_spaces.len() > files.len() {
+        file_system_blocks.push(ContiguousBlock {
+            file_id: None,
+            len: *free_spaces.last().unwrap() as usize,
+        });
+    } else if files.len() > free_spaces.len() {
+        file_system_blocks.push(ContiguousBlock {
+            file_id: Some(files.len() - 1),
+            len: *files.last().unwrap() as usize,
+        });
+    }
 
-    (p1, p2)
+    rayon::join(|| solve_part1(file_system.clone()), || solve_part2(files, file_system_blocks))
 }
 
 fn solve_part1(mut file_system: Vec<Option<usize>>) -> usize {
-    loop {
-        let Some(last_used) = file_system.iter().rposition(|&x| x.is_some()) else {
-            break;
-        };
-        let Some(first_free) = file_system
-            .iter()
-            .position(|&x| x.is_none())
-            .filter(|&x| file_system[x + 1..].iter().any(|&x| x.is_some()))
-        else {
-            break;
-        };
-        file_system.swap(first_free, last_used);
+    let mut first_free = file_system.iter().position(|&x| x.is_none()).unwrap();
+    let mut last_used = file_system.iter().rposition(|&x| x.is_some()).unwrap();
 
-        while file_system.last() == Some(&None) {
-            file_system.pop();
+    while first_free < last_used {
+        file_system.swap(first_free, last_used);
+        while file_system[first_free].is_some() {
+            first_free += 1;
+        }
+        while file_system[last_used].is_none() {
+            last_used -= 1;
         }
     }
 
@@ -86,43 +80,67 @@ fn checksum(file_system: Vec<Option<usize>>) -> usize {
     file_system
         .into_iter()
         .enumerate()
-        .filter_map(|(i, f)| f.map(|f| i * f as usize))
+        .filter_map(|(i, f)| Some(i * f?))
         .sum::<usize>()
 }
 
-fn solve_part2(files: Vec<u8>, mut file_system: Vec<Option<usize>>) -> usize {
+fn solve_part2(files: Vec<u8>, mut file_system: Vec<ContiguousBlock>) -> usize {
     for file_id in (0..files.len()).rev() {
-        let mut l = 0;
-
         let file_len = files[file_id] as usize;
-
-        let src = file_system.iter().position(|&x| x == Some(file_id)).unwrap();
-        let Some(dst) = file_system
+        let src = file_system
             .iter()
-            .enumerate()
-            .take(src + files[file_id] as usize)
-            .find_map(|(i, b)| {
-                if l >= files[file_id] as usize {
-                    return Some(i - l);
-                }
-
-                if b.is_none() {
-                    l += 1;
-                } else {
-                    l = 0;
-                }
-
-                None
-            })
+            .position(|block| block.file_id == Some(file_id))
+            .unwrap();
+        let Some(dst_idx) = file_system
+            .iter()
+            .take(src + 1)
+            .position(|block| block.file_id.is_none() && block.len >= file_len)
         else {
             continue;
         };
 
-        file_system[src..src + file_len].fill(None);
-        file_system[dst..dst + file_len].fill(Some(file_id));
+        // Decrement the length of the destination free space block.
+        file_system[dst_idx].len -= file_len;
+
+        // Mark the source file block as free.
+        file_system[src].file_id = None;
+        // Merge the source file block with adjacent free space blocks.
+        if let Some(&ContiguousBlock { file_id: None, len: right_len }) = file_system.get(src + 1) {
+            file_system[src].len += right_len;
+            file_system.remove(src + 1);
+        }
+        if let Some(&ContiguousBlock { file_id: None, len: left_len }) = file_system.get(src - 1).filter(|_| dst_idx != (src - 1)) {
+            file_system[src].len += left_len;
+            file_system.remove(src - 1);
+        }
+
+        // Insert the file block at the destination.
+        file_system.insert(
+            dst_idx,
+            ContiguousBlock {
+                file_id: Some(file_id),
+                len: file_len,
+            },
+        );
     }
 
-    checksum(file_system)
+    checksum_blocks(file_system)
+}
+
+fn checksum_blocks(file_system: Vec<ContiguousBlock>) -> usize {
+    let mut sum = 0;
+    let mut pos = 0;
+
+    for block in file_system {
+        if let Some(file_id) = block.file_id {
+            // sum of the sequence pos...(pos+L-1) is (L*(2*pos + L - 1))/2
+            let range_sum = (block.len * (2 * pos + block.len - 1)) / 2;
+            sum += range_sum * file_id;
+        }
+        pos += block.len;
+    }
+
+    sum
 }
 
 #[cfg(test)]
