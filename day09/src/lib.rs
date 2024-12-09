@@ -1,146 +1,117 @@
-use std::fmt::Display;
+use std::{cmp::Reverse, fmt::Display, iter::repeat_n};
 
-use std::iter::repeat_n;
-
-#[derive(Debug, Clone, Copy)]
-struct ContiguousBlock {
-    file_id: Option<usize>,
-    len: usize,
-}
+const EMPTY: i16 = -1;
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
-    let input = include_str!("input.txt").trim();
-
-    let mut files = Vec::with_capacity(input.len() / 2);
-    let mut free_spaces = Vec::with_capacity(input.len() / 2);
-    for (i, b) in input.bytes().enumerate() {
-        if i % 2 == 0 {
-            files.push(b - b'0');
-        } else {
-            free_spaces.push(b - b'0');
-        }
-    }
-
-    let mut file_system = Vec::with_capacity(input.len());
-    for ((file_id, &file), &space) in files.iter().enumerate().zip(free_spaces.iter()) {
-        file_system.extend(repeat_n(Some(file_id), file as usize));
-        file_system.extend(repeat_n(None, space as usize));
-    }
-    if free_spaces.len() > files.len() {
-        file_system.extend(repeat_n(None, *free_spaces.last().unwrap() as usize));
-    } else if files.len() > free_spaces.len() {
-        file_system.extend(repeat_n(Some(files.len() - 1), *files.last().unwrap() as usize));
-    }
-
-    let mut file_system_blocks = Vec::new();
-    for ((file_id, &file), &space) in files.iter().enumerate().zip(free_spaces.iter()) {
-        file_system_blocks.push(ContiguousBlock {
-            file_id: Some(file_id),
-            len: file as usize,
-        });
-        file_system_blocks.push(ContiguousBlock {
-            file_id: None,
-            len: space as usize,
-        });
-    }
-    if free_spaces.len() > files.len() {
-        file_system_blocks.push(ContiguousBlock {
-            file_id: None,
-            len: *free_spaces.last().unwrap() as usize,
-        });
-    } else if files.len() > free_spaces.len() {
-        file_system_blocks.push(ContiguousBlock {
-            file_id: Some(files.len() - 1),
-            len: *files.last().unwrap() as usize,
-        });
-    }
-
-    rayon::join(|| solve_part1(file_system.clone()), || solve_part2(files, file_system_blocks))
+    rayon::join(|| solve_part1(), || solve_part2())
 }
 
-fn solve_part1(mut file_system: Vec<Option<usize>>) -> usize {
-    let mut first_free = file_system.iter().position(|&x| x.is_none()).unwrap();
-    let mut last_used = file_system.iter().rposition(|&x| x.is_some()).unwrap();
+fn solve_part1() -> u64 {
+    let input = include_str!("input.txt").trim();
+
+    let mut disk = Vec::new();
+    let mut first_free = usize::MAX;
+    let mut last_used = 0;
+    let mut next_id = 0;
+
+    for (i, val) in input.bytes().enumerate() {
+        let val = (val - b'0') as usize;
+
+        if i % 2 == 0 {
+            disk.extend(repeat_n(next_id, val));
+            last_used = disk.len() - 1;
+            next_id += 1;
+        } else {
+            disk.extend(repeat_n(EMPTY, val));
+            if first_free == usize::MAX {
+                first_free = disk.len() - val;
+            }
+        }
+    }
 
     while first_free < last_used {
-        file_system.swap(first_free, last_used);
-        while file_system[first_free].is_some() {
+        disk.swap(first_free, last_used);
+        while disk[first_free] != EMPTY {
             first_free += 1;
         }
-        while file_system[last_used].is_none() {
+        while disk[last_used] == EMPTY {
             last_used -= 1;
         }
     }
 
-    checksum(file_system)
+    checksum(disk)
 }
 
-fn checksum(file_system: Vec<Option<usize>>) -> usize {
+fn solve_part2() -> u64 {
+    let input = include_str!("input.txt").trim();
+
+    let mut next_id = 0;
+    let mut spaces: [std::collections::BinaryHeap<Reverse<usize>>; 10] = std::array::from_fn(|_| Default::default());
+
+    let mut disk = Vec::new();
+    for (i, val) in input.bytes().enumerate() {
+        let val = (val - b'0') as usize;
+
+        if i % 2 == 0 {
+            // It's a file
+            disk.extend(repeat_n(next_id, val));
+            next_id += 1;
+        } else {
+            // It's free space
+            // push the start of this free space block
+            let start_idx = disk.len();
+            spaces[val].push(Reverse(start_idx));
+            disk.extend(repeat_n(EMPTY, val));
+        }
+    }
+
+    let mut i = disk.len() - 1;
+    while i != 0 {
+        if disk[i] == EMPTY {
+            i -= 1;
+            continue;
+        }
+
+        let file_id = disk[i];
+        let mut file_size = 0;
+        while disk[i] == file_id {
+            file_size += 1;
+            if i == 0 {
+                break;
+            } else {
+                i -= 1;
+            }
+        }
+
+        if let Some((smallest_i, best_width)) = (file_size..10)
+            .filter_map(|size| spaces[size].peek().copied().map(|i| (i.0, size)))
+            .min_by_key(|&(i, _)| i)
+            .filter(|&(j, _)| j <= i)
+        {
+            disk[smallest_i..smallest_i + file_size].fill(file_id);
+            disk[i + 1..i + 1 + file_size].fill(EMPTY);
+
+            spaces[best_width].pop();
+
+            if best_width > file_size {
+                let leftover_start = smallest_i + file_size;
+                let leftover_size = best_width - file_size;
+                spaces[leftover_size].push(Reverse(leftover_start));
+            }
+        }
+    }
+
+    checksum(disk)
+}
+
+fn checksum(file_system: Vec<i16>) -> u64 {
     file_system
         .into_iter()
         .enumerate()
-        .filter_map(|(i, f)| Some(i * f?))
-        .sum::<usize>()
-}
-
-fn solve_part2(files: Vec<u8>, mut file_system: Vec<ContiguousBlock>) -> usize {
-    for file_id in (0..files.len()).rev() {
-        let file_len = files[file_id] as usize;
-        let src = file_system
-            .iter()
-            .position(|block| block.file_id == Some(file_id))
-            .unwrap();
-        let Some(dst_idx) = file_system
-            .iter()
-            .take(src + 1)
-            .position(|block| block.file_id.is_none() && block.len >= file_len)
-        else {
-            continue;
-        };
-
-        // Decrement the length of the destination free space block.
-        file_system[dst_idx].len -= file_len;
-
-        // Mark the source file block as free.
-        file_system[src].file_id = None;
-        // Merge the source file block with adjacent free space blocks.
-        if let Some(&ContiguousBlock { file_id: None, len: right_len }) = file_system.get(src + 1) {
-            file_system[src].len += right_len;
-            file_system.remove(src + 1);
-        }
-        if let Some(&ContiguousBlock { file_id: None, len: left_len }) = file_system.get(src - 1).filter(|_| dst_idx != (src - 1)) {
-            file_system[src].len += left_len;
-            file_system.remove(src - 1);
-        }
-
-        // Insert the file block at the destination.
-        file_system.insert(
-            dst_idx,
-            ContiguousBlock {
-                file_id: Some(file_id),
-                len: file_len,
-            },
-        );
-    }
-
-    checksum_blocks(file_system)
-}
-
-fn checksum_blocks(file_system: Vec<ContiguousBlock>) -> usize {
-    let mut sum = 0;
-    let mut pos = 0;
-
-    for block in file_system {
-        if let Some(file_id) = block.file_id {
-            // sum of the sequence pos...(pos+L-1) is (L*(2*pos + L - 1))/2
-            let range_sum = (block.len * (2 * pos + block.len - 1)) / 2;
-            sum += range_sum * file_id;
-        }
-        pos += block.len;
-    }
-
-    sum
+        .filter(|&(_, f)| f != EMPTY)
+        .map(|(i, f)| i as u64 * f as u64)
+        .sum()
 }
 
 #[cfg(test)]
