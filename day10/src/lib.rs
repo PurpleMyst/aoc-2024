@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use rayon::prelude::*;
+
 const START: u8 = 0;
 const END: u8 = 9;
 
@@ -30,15 +32,16 @@ pub fn solve() -> (impl Display, impl Display) {
     let side = input.lines().count();
     let grid = grid::Grid::from_vec(input.bytes().filter(|&b| b != b'\n').map(|b| b - b'0').collect(), side);
 
-    let mut p2 = 0;
-    let p1 = grid
-        .indexed_iter()
+    grid.indexed_iter()
         .filter(|(_, &c)| c == START)
         .map(|(pos, _)| State { pos })
+        .collect::<Vec<_>>()
+        .into_par_iter()
         .map(|state| {
             let mut states = vec![state];
             let mut reachable = grid::Grid::new(side, side);
             reachable.fill(false);
+            let mut p2 = 0;
 
             while let Some(state) = states.pop() {
                 if let Some(&cell) = grid.get(state.pos.0, state.pos.1) {
@@ -51,9 +54,7 @@ pub fn solve() -> (impl Display, impl Display) {
                 }
             }
 
-            reachable.iter().filter(|&&b| b).count()
+            (reachable.iter().filter(|&&b| b).count(), p2)
         })
-        .sum::<usize>();
-
-    (p1, p2)
+        .reduce(|| (0, 0), |(p1, p2), (p1_, p2_)| (p1 + p1_, p2 + p2_))
 }
