@@ -30,6 +30,7 @@ impl State {
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
     let side = input.lines().count();
+    debug_assert!(side < 64);
     let grid = grid::Grid::from_vec(input.bytes().filter(|&b| b != b'\n').map(|b| b - b'0').collect(), side);
 
     grid.indexed_iter()
@@ -39,14 +40,13 @@ pub fn solve() -> (impl Display, impl Display) {
         .into_par_iter()
         .map(|state| {
             let mut states = vec![state];
-            let mut reachable = grid::Grid::new(side, side);
-            reachable.fill(false);
+            let mut reachable = vec![0u64; side];
             let mut p2 = 0;
 
             while let Some(state) = states.pop() {
                 if let Some(&cell) = grid.get(state.pos.0, state.pos.1) {
                     if cell == END {
-                        reachable[state.pos] = true;
+                        reachable[state.pos.0] |= 1 << state.pos.1;
                         p2 += 1;
                     } else {
                         states.extend(state.advance(&grid));
@@ -54,7 +54,8 @@ pub fn solve() -> (impl Display, impl Display) {
                 }
             }
 
-            (reachable.iter().filter(|&&b| b).count(), p2)
+            let p1 = reachable.iter().map(|r| r.count_ones() as u64).sum::<u64>();
+            (p1, p2)
         })
         .reduce(|| (0, 0), |(p1, p2), (p1_, p2_)| (p1 + p1_, p2 + p2_))
 }
