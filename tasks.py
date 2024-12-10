@@ -109,7 +109,7 @@ def in_root_dir(f):
 @wrap_errors((requests.HTTPError,))
 def refetch_inputs() -> None:
     "Fetch the inputs that aren't present locally, since they cannot be stored in the repo."
-    for day in Path().glob("day*"):
+    for day in Path(__file__).parent.glob("day*"):
         input_path = day / "src" / "input.txt"
         if input_path.exists():
             continue
