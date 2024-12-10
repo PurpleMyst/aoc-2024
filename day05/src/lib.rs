@@ -51,8 +51,14 @@ pub fn solve() -> (impl Display, impl Display) {
                 (
                     0,
                     *update
-                        .select_nth_unstable_by(midpoint, |&n, &m| if order.contains(n, m) { Ordering::Less } else { Ordering::Greater })
-                        .1 as u16
+                        .select_nth_unstable_by(midpoint, |&n, &m| {
+                            if order.contains(n, m) {
+                                Ordering::Less
+                            } else {
+                                Ordering::Greater
+                            }
+                        })
+                        .1 as u16,
                 )
             }
         })
