@@ -1,16 +1,13 @@
 use std::fmt::Display;
 
+use rustc_hash::FxHashMap;
+use memoize::memoize;
+
 fn num_digits(n: u64) -> u64 {
-    let mut n = n;
-    let mut count = 0;
-    while n > 0 {
-        n /= 10;
-        count += 1;
-    }
-    count
+    n.ilog10() as u64 + 1
 }
 
-#[memoize::memoize]
+#[memoize(CustomHasher: FxHashMap, HasherInit: FxHashMap::default())]
 fn stones(n: u64, steps_left: usize) -> usize {
     if steps_left == 0 {
         return 1;
