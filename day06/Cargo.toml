@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+fixedbitset = "0.5.7"
 grid = "0.15.0"
-hibitset = "0.6.4"
 rayon = "1.10.0"

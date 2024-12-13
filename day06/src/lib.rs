@@ -1,12 +1,13 @@
+use fixedbitset::FixedBitSet;
+use rayon::prelude::*;
 use std::fmt::Display;
 
-use hibitset::BitSet;
-use rayon::prelude::*;
+const DIRECTIONS: [(i8, i8); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+const SIDE: u8 = 130;
 
-// Directions, ordered clockwise and as (dy, dx) tuples starting from "up".
-// We're utilizing 16-bit integers as positions to be faster and more memory efficient.
-// For whatever reason, using 8-bit integers is slower. \_(ツ)_/
-const DIRECTIONS: [(i16, i16); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+fn pos2idx(y: u8, x: u8) -> usize {
+    usize::from(y) * usize::from(SIDE) + usize::from(x)
+}
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
@@ -16,23 +17,21 @@ pub fn solve() -> (impl Display, impl Display) {
         input.lines().next().unwrap().len(),
     );
     debug_assert_eq!(map.rows(), map.cols());
-    let side = map.cols() as u16;
-    debug_assert!(side < u16::MAX);
 
     // Find the starting position.
     let (start_pos, _) = map.indexed_iter().find(|&(_, &c)| c == b'^').unwrap();
-    let start_pos = (start_pos.0 as u16, start_pos.1 as u16);
+    let start_pos = (start_pos.0 as u8, start_pos.1 as u8);
 
     // Convert the map into a bitset of walls for faster lookup.
-    let mut walls = BitSet::with_capacity(side as u32 * side as u32);
+    let mut walls = FixedBitSet::with_capacity(usize::from(SIDE) * usize::from(SIDE));
     for (pos, &c) in map.indexed_iter() {
         if c == b'#' {
-            walls.add((pos.0 * map.cols() + pos.1) as u32);
+            walls.insert(pos2idx(pos.0 as u8, pos.1 as u8));
         }
     }
 
     // Walk the walk for part 1.
-    let p1_visited_by_dir = do_solve(&walls, side, start_pos).0;
+    let p1_visited_by_dir = do_solve(&walls, None, start_pos).0;
 
     // We've got a bitset for each direction, but we need to combine them into one for part one.
     let (first, rest) = p1_visited_by_dir.split_first().unwrap();
@@ -40,20 +39,18 @@ pub fn solve() -> (impl Display, impl Display) {
     for visited in rest {
         p1_visited |= visited;
     }
-    let p1 = p1_visited.layer0_as_slice().iter().map(|n| n.count_ones()).sum::<u32>();
+    let p1 = p1_visited.count_ones(..);
 
     // Let's move on to part 2.
     // We'll utilize the visited map for part one as candidates for obstacles; since the problem text specifies the
-    // start is not an option, we'll just set remove it from consdieration.
-    p1_visited.remove((start_pos.0 * side + start_pos.1) as u32);
-    let p2 = (0..side)
+    // start is not an option, we'll just remove it from consideration.
+    p1_visited.remove(pos2idx(start_pos.0, start_pos.1));
+    let p2 = (0..SIDE)
         .into_par_iter()
-        .flat_map(|y| (0..side).into_par_iter().map(move |x| (y, x)))
-        .filter(|(y, x)| p1_visited.contains((y * side + x) as u32))
-        .filter(|(y, x)| {
-            let mut new_walls = walls.clone();
-            new_walls.add((y * side + x) as u32);
-            let (_, enters_loop) = do_solve(&new_walls, side, start_pos);
+        .flat_map(|y| (0..SIDE).into_par_iter().map(move |x| (y, x)))
+        .filter(|&(y, x)| p1_visited.contains(pos2idx(y, x)))
+        .filter(|&(y, x)| {
+            let (_, enters_loop) = do_solve(&walls, Some((y, x)), start_pos);
             enters_loop
         })
         .count();
@@ -61,28 +58,34 @@ pub fn solve() -> (impl Display, impl Display) {
     (p1, p2)
 }
 
-fn do_solve(walls: &BitSet, side: u16, (mut y, mut x): (u16, u16)) -> ([BitSet; DIRECTIONS.len()], bool) {
-    let mut visited_by_dir: [_; DIRECTIONS.len()] = std::array::from_fn(|_| BitSet::new());
+fn do_solve(
+    walls: &FixedBitSet,
+    extra_wall: Option<(u8, u8)>,
+    (mut y, mut x): (u8, u8),
+) -> ([FixedBitSet; DIRECTIONS.len()], bool) {
+    let mut visited_by_dir: [FixedBitSet; DIRECTIONS.len()] =
+        std::array::from_fn(|_| FixedBitSet::with_capacity(usize::from(SIDE) * usize::from(SIDE)));
 
     loop {
         for ((dy, dx), visited) in DIRECTIONS.into_iter().zip(&mut visited_by_dir) {
             loop {
-                let idx = (y * side + x) as u32;
-                if visited.contains(idx) {
+                let idx = pos2idx(y, x);
+                if visited.contains(usize::from(idx)) {
                     return (visited_by_dir, true);
                 }
-                visited.add(idx);
+                visited.insert(usize::from(idx));
 
                 // Move into the new direction, checking if we go out of bounds.
-                // We're abusing wrapping here, since 0 - 1 = u16::MAX, so we're also implicitly assuming side to be way
-                // smaller than that. Which is true.
+                // Since SIDE is small enough, overflow'll never happen and underflow is beneficial (it allows us to
+                // avoid checking for negative values).
                 let new_y = y.wrapping_add_signed(dy);
                 let new_x = x.wrapping_add_signed(dx);
-                if new_y >= side || new_x >= side {
+                if new_y >= SIDE || new_x >= SIDE {
                     return (visited_by_dir, false);
                 }
 
-                if walls.contains((new_y * side + new_x) as u32) {
+                let new_idx = pos2idx(new_y, new_x);
+                if Some((new_y, new_x)) == extra_wall || walls.contains(new_idx) {
                     break;
                 }
 
