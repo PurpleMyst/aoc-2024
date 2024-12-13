@@ -1,10 +1,9 @@
 use rayon::prelude::*;
 
 type Coord = u16;
-type Cost = u16;
 
-const A_COST: f64 = 3.0;
-const B_COST: f64 = 1.0;
+const A_COST: i32 = 3;
+const B_COST: i32 = 1;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ClawMachine {
@@ -57,7 +56,11 @@ pub fn load_input(input: &str) -> Vec<ClawMachine> {
         .collect()
 }
 
-pub fn do_solve(machines: &[ClawMachine]) -> Cost {
+fn whole_div(num: i32, den: i32) -> Option<i32> {
+    (num % den == 0).then(|| num / den)
+}
+
+pub fn do_solve(machines: &[ClawMachine]) -> i32 {
     // calling A and B the vectors of each button, and a and b the number of times we've pressed, we've got
     // p = aA + bB
     // and cost given by
@@ -75,13 +78,17 @@ pub fn do_solve(machines: &[ClawMachine]) -> Cost {
     machines
         .into_par_iter()
         .filter_map(|machine| {
-            let a = (machine.prize.y as f64 - machine.b.y as f64 * machine.prize.x as f64 / machine.b.x as f64)
-                / (machine.a.y as f64 - machine.b.y as f64 * machine.a.x as f64 / machine.b.x as f64);
-            let b = (machine.prize.x as f64 - machine.a.x as f64 * a) / machine.b.x as f64;
+            let a = whole_div(
+                machine.prize.y as i32 * machine.b.x as i32 - machine.b.y as i32 * machine.prize.x as i32,
+                machine.a.y as i32 * machine.b.x as i32 - machine.b.y as i32 * machine.a.x as i32,
+            )?;
+            let b = whole_div(
+                machine.prize.x as i32 - machine.a.x as i32 * a as i32,
+                machine.b.x as i32,
+            )
+            .unwrap();
             let cost = A_COST * a + B_COST * b;
-            let cost_rounded = cost.round();
-            let cost_is_whole = (cost_rounded - cost).abs() < 1e-3;
-            cost_is_whole.then(|| cost_rounded as Cost)
+            Some(cost)
         })
         .sum()
 }
