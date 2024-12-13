@@ -1,12 +1,15 @@
 use std::fmt::Display;
 
+use itertools::iproduct;
+
+// Directions for the eight neigihbors of a cell, arranged so that:
+// * the lower four are the cardinal directions; 
+// * the upper four are the diagonals.
 const DIRS: [(isize, isize); 8] = [
-    // first four are horizontal
     (0, 1),
     (1, 0),
     (0, -1),
     (-1, 0),
-    // next four are diagonal
     (1, 1),
     (1, -1),
     (-1, 1),
@@ -19,7 +22,40 @@ pub fn solve() -> (impl Display, impl Display) {
     do_solve(input)
 }
 
-fn do_solve(input: &str) -> (i32, i32) {
+struct Bitset { // 256xN bits
+    data: Vec<[u128; 2]>,
+}
+
+impl Bitset {
+    fn new(side: usize) -> Self {
+        Self {
+            data: vec![[0, 0]; side],
+        }
+    }
+
+    fn set(&mut self, y: usize, x: usize) {
+        debug_assert!(y < self.data.len());
+        debug_assert!(x < 256);
+        let (i, j) = (x / 128, x % 128);
+        self.data[y][i] |= 1 << j;
+    }
+
+    fn get(&self, y: usize, x: usize) -> bool {
+        debug_assert!(y < self.data.len());
+        debug_assert!(x < 256);
+        let (i, j) = (x / 128, x % 128);
+        self.data[y][i] & (1 << j) != 0
+    }
+
+    fn reset(&mut self) {
+        for row in &mut self.data {
+            row[0] = 0;
+            row[1] = 0;
+        }
+    }
+}
+
+fn do_solve(input: &str) -> (usize, usize) {
     let map = input.bytes().filter(|&b| b != b'\n').collect::<Vec<_>>();
     let side = input.bytes().position(|b| b == b'\n').unwrap();
 
@@ -37,109 +73,97 @@ fn do_solve(input: &str) -> (i32, i32) {
         .filter(|&(y, x)| y < side && x < side)
     };
 
-    let mut regions = (0..side * side).collect::<Vec<_>>();
-    loop {
-        let mut changed = false;
-        'a: for (y, x) in (0..side * side).map(coords) {
-            for (ny, nx) in neighbors(y, x) {
-                if map[idx(y, x)] == map[idx(ny, nx)] && regions[idx(ny, nx)] != regions[idx(y, x)] {
-                    let common = std::cmp::min(regions[idx(y, x)], regions[idx(ny, nx)]);
-                    regions[idx(y, x)] = common;
-                    regions[idx(ny, nx)] = common;
-                    changed = true;
-                    break 'a;
-                }
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    let mut distinct_regions = regions.clone();
-    distinct_regions.sort();
-    distinct_regions.dedup();
-
     let mut p1 = 0;
     let mut p2 = 0;
 
-    for region in distinct_regions {
+    let mut visited = Bitset::new(side);
+
+    let mut stack = vec![];
+    let mut seen = Bitset::new(side);
+    let mut neighbor_dirs = vec![0u8; (1 + side * 2) * (1 + side * 2)];
+
+    // Each cell could be the seed of a region, so let's iterate over all of them.
+    for (y, x) in iproduct!(0..side, 0..side) {
+        // If this is already part of a region, skip it.
+        if visited.get(y, x) {
+            continue;
+        }
+        visited.set(y, x);
+
+        // Area and perimeter of the current region, easy to calculate while constructing.
         let mut area = 0;
         let mut perimeter = 0;
 
-        let start_idx = (0..side * side).find(|&idx| regions[idx] == region).unwrap();
-
-        let mut stack = vec![start_idx];
-        let mut seen = vec![false; side * side];
-
-        while let Some(cur_idx) = stack.pop() {
-            let (y, x) = coords(cur_idx);
-            if regions[cur_idx] != region {
-                continue;
-            }
-            if seen[cur_idx] {
-                continue;
-            }
-            seen[cur_idx] = true;
-
-            area += 1;
-
-            perimeter += 4;
-            for (ny, nx) in neighbors(y, x) {
-                let nidx = idx(ny, nx);
-
-                if regions[nidx] == region {
-                    stack.push(nidx);
-                    perimeter -= 1;
-                }
-            }
-        }
-
+        // The region's bounding box.
         let mut region_min_y = usize::MAX;
         let mut region_max_y = 0;
         let mut region_min_x = usize::MAX;
         let mut region_max_x = 0;
-        for (y, x) in (0..side).flat_map(|y| (0..side).map(move |x| (y, x))) {
-            if regions[idx(y, x)] == region {
-                region_min_y = region_min_y.min(y);
-                region_max_y = region_max_y.max(y);
-                region_min_x = region_min_x.min(x);
-                region_max_x = region_max_x.max(x);
+
+        // Start the DFS from this cell.
+        let start_idx = idx(y, x);
+        stack.push(start_idx);
+        seen.reset();
+        neighbor_dirs.fill(0);
+        while let Some(cur_idx) = stack.pop() {
+            let (y, x) = coords(cur_idx);
+            if seen.get(y, x) {
+                continue;
+            }
+            seen.set(y, x);
+
+            region_min_y = region_min_y.min(y);
+            region_max_y = region_max_y.max(y);
+            region_min_x = region_min_x.min(x);
+            region_max_x = region_max_x.max(x);
+
+            // Each cell contributes 1 to the area and 4 to the perimeter.
+            area += 1;
+            perimeter += 4;
+            for (ny, nx) in neighbors(y, x) {
+                let nidx = idx(ny, nx);
+
+                // Any neighbors that are part of the same region subtract 1 from the perimeter, and are added to the
+                // stack.
+                if map[cur_idx] == map[nidx] {
+                    stack.push(nidx);
+                    perimeter -= 1;
+                }
+            }
+
+            // Update this cell's neighbors' to mark there is a neighbor in this direction.
+            for (i, (dy, dx)) in DIRS.iter().copied().enumerate() {
+                let ny = 1 + (2 * y as isize + dy);
+                let nx = 1 + (2 * x as isize + dx);
+                neighbor_dirs[ny as usize * (1 + side * 2) + nx as usize] |= 1 << i;
             }
         }
+
+        // Sides'll correspond to the number of corners in the region.
         let mut sides = 0;
 
-        let mut bitset = vec![0u64; (1 + side * 2) * (1 + side * 2)];
-        for y in 0..side {
-            for x in 0..side {
-                if regions[idx(y, x)] != region {
-                    continue;
-                }
-                for (i, (dy, dx)) in DIRS.iter().copied().enumerate() {
-                    let ny = 1 + (2 * y as isize + dy);
-                    let nx = 1 + (2 * x as isize + dx);
-                    assert!((0..=side as isize * 2).contains(&ny));
-                    assert!((0..=side as isize * 2).contains(&nx));
-
-                    bitset[ny as usize * (1 + side * 2) + nx as usize] |= 1 << i;
-                }
-            }
-        }
-
+        // For each cell in the region...
         for y in 2 * (region_min_y as isize)..=2 * (region_max_y as isize + 1) {
             for x in 2 * (region_min_x as isize)..=2 * (region_max_x as isize + 1) {
                 let y = y as usize;
                 let x = x as usize;
 
-                if y % 2 == 1 && x % 2 == 1 {
-                } else {
-                    // this is a boundary point
-                    let flags = bitset[y * (1 + side * 2) + x];
-                    if flags & 0xf0 != 0 && flags & 0x0f == 0 && (flags & 0xf0).count_ones() % 2 == 1 {
+                if y % 2 == 0 && x % 2 == 0 {
+                    let flags = neighbor_dirs[y * (1 + side * 2) + x];
+
+                    // If this has anything in the cardinal directions, it's not a corner.
+                    if flags & 0x0f != 0 {
+                        continue;
+                    }
+
+                    if (flags & 0xf0).count_ones() % 2 == 1 {
+                        // Simple corner, with one or three neighbors.
                         sides += 1;
-                    } else if flags & 0b1001_0000 == 0b1001_0000 && flags & 0b0110_0000 == 0 && flags & 0x0f == 0 {
+                    } else if flags & 0b1001_0000 == 0b1001_0000 && flags & 0b0110_0000 == 0 {
+                        // Double corner!
                         sides += 2;
-                    } else if flags & 0b0110_0000 == 0b0110_0000 && flags & 0b1001_0000 == 0 && flags & 0x0f == 0 {
+                    } else if flags & 0b0110_0000 == 0b0110_0000 && flags & 0b1001_0000 == 0 {
+                        // Double corner, but mirrored!
                         sides += 2;
                     }
                 }
@@ -148,6 +172,15 @@ fn do_solve(input: &str) -> (i32, i32) {
 
         p1 += area * perimeter;
         p2 += area * sides;
+
+        // Update the visited bitset within the region's bounding box.
+        for y in region_min_y..=region_max_y {
+            for x in region_min_x..=region_max_x {
+                if seen.get(y, x) {
+                    visited.set(y, x);
+                }
+            }
+        }
     }
 
     (p1, p2)
