@@ -40,6 +40,7 @@ dependencies = [
  "day11",
  "day12",
  "day13",
+ "day14",
  "iai",
 ]
 
@@ -283,6 +284,14 @@ dependencies = [
 name = "day13"
 version = "0.1.0"
 dependencies = [
+ "rayon",
+]
+
+[[package]]
+name = "day14"
+version = "0.1.0"
+dependencies = [
+ "fixedbitset 0.5.7",
  "rayon",
 ]
 
