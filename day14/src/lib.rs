@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use rayon::prelude::*;
 
-type Coord = i64;
+type Coord = i32;
 type Pair = (Coord, Coord);
 
 const WIDTH: Coord = 101;
@@ -74,7 +74,7 @@ fn solve_part1(robots: &[Robot]) -> usize {
 
 // not the biggest fan of this puzzle, i guess it's nice but the requirements were really vague
 // what even is a christmas tree?
-fn solve_part2(robots: &[Robot]) -> i64 {
+fn solve_part2(robots: &[Robot]) -> i32 {
     (0..10_000)
         .into_par_iter()
         .find_first(|&t| {
