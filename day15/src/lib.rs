@@ -98,10 +98,7 @@ pub fn solve() -> (impl Display, impl Display) {
 
     let map = map.bytes().filter(|&b| b != b'\n').collect::<Vec<_>>();
 
-    let p1 = do_solve::<false>(map.clone(), width, moves, height);
-    let p2 = do_solve::<true>(map, width, moves, height);
-
-    (p1, p2)
+    rayon::join(|| do_solve::<false>(map.clone(), width, moves, height), || do_solve::<true>(map.clone(), width, moves, height))
 }
 
 fn do_solve<const PART2: bool>(mut map: Vec<u8>, mut width: usize, moves: &str, height: usize) -> usize {
