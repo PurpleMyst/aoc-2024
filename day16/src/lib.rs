@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use ::bucket_queue::*;
+use fixedbitset::FixedBitSet;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct State {
@@ -9,12 +10,12 @@ struct State {
 }
 
 impl State {
-    fn advance(self, map: &[u8], side: usize) -> impl Iterator<Item = (Self, usize)> {
+    fn advance(self, walkable: &FixedBitSet, side: usize) -> impl Iterator<Item = (Self, usize)> {
         [
             {
                 let next_y = self.pos.0.wrapping_add_signed(self.dir.0);
                 let next_x = self.pos.1.wrapping_add_signed(self.dir.1);
-                (map[usize::from(next_y) * usize::from(side) + usize::from(next_x)] != b'#').then(|| {
+                (walkable[usize::from(next_y) * usize::from(side) + usize::from(next_x)]).then(|| {
                     (
                         Self {
                             pos: (next_y, next_x),
@@ -43,23 +44,22 @@ impl State {
         .flatten()
     }
 
+    // branchless to_index
     fn to_index(&self, side: usize) -> usize {
-        (usize::from(self.pos.0) * side + usize::from(self.pos.1)) * 4
-            + match self.dir {
-                (0, 1) => 0,
-                (1, 0) => 1,
-                (0, -1) => 2,
-                (-1, 0) => 3,
-                _ => unreachable!(),
-            }
+        let pos_index = (usize::from(self.pos.0) * side + usize::from(self.pos.1)) * 4;
+        let dir0_pos = (self.dir.0 > 0) as usize; // 1 if dir.0 > 0, else 0
+        let dir0_neg = (self.dir.0 < 0) as usize; // 1 if dir.0 < 0, else 0
+        let dir1_neg = (self.dir.1 < 0) as usize; // 1 if dir.1 < 0, else 0
+        let dir_index = dir0_pos + (dir0_neg * 3) + (dir1_neg * 2);
+        pos_index + dir_index
     }
 
-    fn rewind(self, map: &[u8], side: usize) -> impl Iterator<Item = (Self, usize)> {
+    fn rewind(self, walkable: &FixedBitSet, side: usize) -> impl Iterator<Item = (Self, usize)> {
         [
             {
                 let next_y = self.pos.0.wrapping_add_signed(-self.dir.0);
                 let next_x = self.pos.1.wrapping_add_signed(-self.dir.1);
-                (map[usize::from(next_y) * usize::from(side) + usize::from(next_x)] != b'#').then(|| {
+                (walkable[usize::from(next_y) * usize::from(side) + usize::from(next_x)]).then(|| {
                     (
                         Self {
                             pos: (next_y, next_x),
@@ -89,7 +89,7 @@ impl State {
     }
 }
 
-fn distance_map<const REVERSE: bool>(start: State, goal: (u8, u8), map: &[u8], side: usize) -> Vec<usize> {
+fn distance_map<const REVERSE: bool>(start: State, goal: (u8, u8), map: &FixedBitSet, side: usize) -> Vec<usize> {
     let mut dist = vec![usize::MAX; side * side * 4];
     let mut pq = BucketQueue::<Vec<_>>::new();
     pq.push(start, 0);
@@ -132,13 +132,16 @@ pub fn solve() -> (impl Display, impl Display) {
 
     let mut start = usize::MAX;
     let mut end = usize::MAX;
+    let mut walkable = FixedBitSet::with_capacity(side * side);
 
     for (i, b) in map.iter().enumerate() {
         match b {
             b'S' => start = i,
             b'E' => end = i,
+            b'#' => continue,
             _ => {}
         }
+        walkable.insert(i);
     }
     let (start_y, start_x) = ((start / side) as u8, (start % side) as u8);
     let (end_y, end_x) = ((end / side) as u8, (end % side) as u8);
@@ -151,7 +154,7 @@ pub fn solve() -> (impl Display, impl Display) {
                     dir: (0, 1),
                 },
                 (end_y, end_x),
-                &map,
+                &walkable,
                 side,
             )
         },
@@ -162,7 +165,7 @@ pub fn solve() -> (impl Display, impl Display) {
                     dir: (-1, 0),
                 },
                 (start_y, start_x),
-                &map,
+                &walkable,
                 side,
             )
         },
@@ -174,7 +177,7 @@ pub fn solve() -> (impl Display, impl Display) {
     }
     .to_index(side)];
 
-    let mut sit_set = fixedbitset::FixedBitSet::with_capacity(side * side);
+    let mut sit_set = FixedBitSet::with_capacity(side * side);
     for ((s1_idx, d1), d2) in forward_dist_by_state.into_iter().enumerate().zip(reverse_dist_by_state) {
         if d1 != usize::MAX && d2 != usize::MAX && d1 + d2 == p1 {
             sit_set.insert(s1_idx / 4);
