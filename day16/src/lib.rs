@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use ::bucket_queue::*;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct State {
     pos: (u8, u8),
@@ -14,7 +16,7 @@ impl State {
                 let next_x = self.pos.1.wrapping_add_signed(self.dir.1);
                 (map[usize::from(next_y) * usize::from(side) + usize::from(next_x)] != b'#').then(|| {
                     (
-                        State {
+                        Self {
                             pos: (next_y, next_x),
                             dir: self.dir,
                         },
@@ -23,14 +25,59 @@ impl State {
                 })
             },
             Some((
-                State {
+                Self {
                     pos: self.pos,
                     dir: (-self.dir.1, self.dir.0),
                 },
                 1000,
             )),
             Some((
-                State {
+                Self {
+                    pos: self.pos,
+                    dir: (self.dir.1, -self.dir.0),
+                },
+                1000,
+            )),
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    fn to_index(&self, side: usize) -> usize {
+        (usize::from(self.pos.0) * side + usize::from(self.pos.1)) * 4
+            + match self.dir {
+                (0, 1) => 0,
+                (1, 0) => 1,
+                (0, -1) => 2,
+                (-1, 0) => 3,
+                _ => unreachable!(),
+            }
+    }
+
+    fn rewind(self, map: &[u8], side: usize) -> impl Iterator<Item = (Self, usize)> {
+        [
+            {
+                let next_y = self.pos.0.wrapping_add_signed(-self.dir.0);
+                let next_x = self.pos.1.wrapping_add_signed(-self.dir.1);
+                (map[usize::from(next_y) * usize::from(side) + usize::from(next_x)] != b'#').then(|| {
+                    (
+                        Self {
+                            pos: (next_y, next_x),
+                            dir: self.dir,
+                        },
+                        1,
+                    )
+                })
+            },
+            Some((
+                Self {
+                    pos: self.pos,
+                    dir: (-self.dir.1, self.dir.0),
+                },
+                1000,
+            )),
+            Some((
+                Self {
                     pos: self.pos,
                     dir: (self.dir.1, -self.dir.0),
                 },
@@ -42,6 +89,40 @@ impl State {
     }
 }
 
+fn distance_map<const REVERSE: bool>(start: State, goal: (u8, u8), map: &[u8], side: usize) -> Vec<usize> {
+    let mut dist = vec![usize::MAX; side * side * 4];
+    let mut pq = BucketQueue::<Vec<_>>::new();
+    pq.push(start, 0);
+    dist[start.to_index(side)] = 0;
+    while let Some(d) = pq.min_priority() {
+        let state = pq.pop_min().unwrap();
+        if state.pos == goal {
+            break;
+        }
+
+        if REVERSE {
+            for (next, w) in state.rewind(map, side) {
+                let i = next.to_index(side);
+                if dist[i] > d + w {
+                    dist[i] = d + w;
+                    pq.push(next, d + w);
+                }
+            }
+        } else {
+            for (next, w) in state.advance(map, side) {
+                let i = next.to_index(side);
+                if dist[i] > d + w {
+                    dist[i] = d + w;
+                    pq.push(next, d + w);
+                }
+            }
+        }
+    }
+
+    dist
+}
+
+// logic adapted from https://www.reddit.com/r/adventofcode/comments/1hfboft/2024_day_16_solutions/m2akf0n/
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
@@ -59,26 +140,47 @@ pub fn solve() -> (impl Display, impl Display) {
             _ => {}
         }
     }
+    let (start_y, start_x) = ((start / side) as u8, (start % side) as u8);
     let (end_y, end_x) = ((end / side) as u8, (end % side) as u8);
 
-    let (paths, p1) = pathfinding::directed::astar::astar_bag(
-        &State {
-            pos: ((start / side) as u8, (start % side) as u8),
-            dir: (0, 1),
+    let (forward_dist_by_state, reverse_dist_by_state) = rayon::join(
+        || {
+            distance_map::<false>(
+                State {
+                    pos: (start_y, start_x),
+                    dir: (0, 1),
+                },
+                (end_y, end_x),
+                &map,
+                side,
+            )
         },
-        |s| s.advance(&map, side),
-        |s| usize::from(s.pos.0.abs_diff(end_y)) + usize::from(s.pos.1.abs_diff(end_x)),
-        |s| s.pos == (end_y, end_x),
-    )
-    .unwrap();
+        || {
+            distance_map::<true>(
+                State {
+                    pos: (end_y, end_x),
+                    dir: (-1, 0),
+                },
+                (start_y, start_x),
+                &map,
+                side,
+            )
+        },
+    );
 
-    let mut bs = fixedbitset::FixedBitSet::with_capacity(map.len());
-    for path in paths {
-        for State { pos, .. } in path {
-            bs.insert(usize::from(pos.0) * side + usize::from(pos.1));
+    let p1 = forward_dist_by_state[State {
+        pos: (end_y, end_x),
+        dir: (-1, 0),
+    }
+    .to_index(side)];
+
+    let mut sit_set = fixedbitset::FixedBitSet::with_capacity(side * side);
+    for ((s1_idx, d1), d2) in forward_dist_by_state.into_iter().enumerate().zip(reverse_dist_by_state) {
+        if d1 != usize::MAX && d2 != usize::MAX && d1 + d2 == p1 {
+            sit_set.insert(s1_idx / 4);
         }
     }
-    let p2 = bs.count_ones(..);
+    let p2 = sit_set.count_ones(..);
 
     (p1, p2)
 }
