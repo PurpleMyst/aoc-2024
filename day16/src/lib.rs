@@ -12,24 +12,33 @@ impl State {
             {
                 let next_y = self.pos.0.wrapping_add_signed(self.dir.0);
                 let next_x = self.pos.1.wrapping_add_signed(self.dir.1);
-                if map[usize::from(next_y) * usize::from(side) + usize::from(next_x)] == b'#' {
-                    None
-                } else {
-                    Some((State {
-                        pos: (next_y, next_x),
-                        dir: self.dir,
-                    }, 1))
-                }
+                (map[usize::from(next_y) * usize::from(side) + usize::from(next_x)] != b'#').then(|| {
+                    (
+                        State {
+                            pos: (next_y, next_x),
+                            dir: self.dir,
+                        },
+                        1,
+                    )
+                })
             },
-            Some((State {
-                pos: self.pos,
-                dir: (-self.dir.1, self.dir.0),
-            }, 1000)),
-            Some((State {
-                pos: self.pos,
-                dir: (self.dir.1, -self.dir.0),
-            }, 1000)),
-        ].into_iter().flatten()
+            Some((
+                State {
+                    pos: self.pos,
+                    dir: (-self.dir.1, self.dir.0),
+                },
+                1000,
+            )),
+            Some((
+                State {
+                    pos: self.pos,
+                    dir: (self.dir.1, -self.dir.0),
+                },
+                1000,
+            )),
+        ]
+        .into_iter()
+        .flatten()
     }
 }
 
@@ -50,19 +59,20 @@ pub fn solve() -> (impl Display, impl Display) {
             _ => {}
         }
     }
+    let (end_y, end_x) = ((end / side) as u8, (end % side) as u8);
 
     let (paths, p1) = pathfinding::directed::astar::astar_bag(
         &State {
-            pos: ((start / side) as u8 , (start % side) as u8),
+            pos: ((start / side) as u8, (start % side) as u8),
             dir: (0, 1),
         },
         |s| s.advance(&map, side),
-        |_| 0,
-        |s| s.pos == ((end / side) as u8, (end % side) as u8),
-    ).unwrap();
+        |s| usize::from(s.pos.0.abs_diff(end_y)) + usize::from(s.pos.1.abs_diff(end_x)),
+        |s| s.pos == (end_y, end_x),
+    )
+    .unwrap();
 
     let mut bs = fixedbitset::FixedBitSet::with_capacity(map.len());
-
     for path in paths {
         for State { pos, .. } in path {
             bs.insert(usize::from(pos.0) * side + usize::from(pos.1));
