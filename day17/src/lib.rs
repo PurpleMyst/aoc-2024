@@ -58,7 +58,6 @@ impl Computer {
             return false;
         };
         let operand = self.program[self.pc + 1];
-        eprintln!("[{:04x} A={:8} B={:8} C={:8}] {} {:x}", self.pc, self.registers[0], self.registers[1], self.registers[2], opcode, operand);
         self.pc += 2;
 
         match opcode {
@@ -89,17 +88,20 @@ impl Computer {
             }
 
             Opcode::Bdv => {
-                self.registers[1] = self.registers[0] / (2 as Number).pow(u32::try_from(self.parse_combo_operand(operand)).unwrap());
+                self.registers[1] =
+                    self.registers[0] / (2 as Number).pow(u32::try_from(self.parse_combo_operand(operand)).unwrap());
             }
 
             Opcode::Cdv => {
-                self.registers[2] = self.registers[0] / (2 as Number).pow(u32::try_from(self.parse_combo_operand(operand)).unwrap());
+                self.registers[2] =
+                    self.registers[0] / (2 as Number).pow(u32::try_from(self.parse_combo_operand(operand)).unwrap());
             }
         }
 
         true
     }
-    
+
+    #[allow(dead_code)]
     fn compile(&self) -> String {
         use std::fmt::Write;
 
@@ -125,48 +127,51 @@ impl Computer {
             }
         };
 
-
         for chunk in self.program.chunks(2) {
             let opcode = chunk[0];
             let operand = chunk[1];
 
+            match Opcode::from(opcode) {
+                Opcode::Adv => {
+                    writeln!(output, "        a /= 2u32.pow({});", parse_combo_operand(operand)).unwrap();
+                }
 
-        match Opcode::from(opcode) {
-            Opcode::Adv => {
-                writeln!(output, "        a /= 2u32.pow({});", parse_combo_operand(operand)).unwrap();
-            }
+                Opcode::Bxl => {
+                    writeln!(output, "        b ^= {};", operand).unwrap();
+                }
 
-            Opcode::Bxl => {
-                writeln!(output, "        b ^= {};", operand).unwrap();
-            }
+                Opcode::Bst => {
+                    writeln!(output, "        b = {} & 0b111;", parse_combo_operand(operand)).unwrap();
+                }
 
-            Opcode::Bst => {
-                writeln!(output, "        b = {} & 0b111;", parse_combo_operand(operand)).unwrap();
-            }
+                Opcode::Jnz => {
+                    debug_assert_eq!(operand, 0);
+                    writeln!(output, "        if a != 0 {{").unwrap();
+                    writeln!(output, "            continue;").unwrap();
+                    writeln!(output, "        }}").unwrap();
+                }
 
-            Opcode::Jnz => {
-                debug_assert_eq!(operand, 0);
-                writeln!(output, "        if a != 0 {{").unwrap();
-                writeln!(output, "            continue;").unwrap();
-                writeln!(output, "        }}").unwrap();
-            }
+                Opcode::Bxc => {
+                    writeln!(output, "        b ^= c;").unwrap();
+                }
 
-            Opcode::Bxc => {
-                writeln!(output, "        b ^= c;").unwrap();
-            }
+                Opcode::Out => {
+                    writeln!(
+                        output,
+                        "        println!(\"{{}}\", {} & 0b111);",
+                        parse_combo_operand(operand)
+                    )
+                    .unwrap();
+                }
 
-            Opcode::Out => {
-                writeln!(output, "        println!(\"{{}}\", {} & 0b111);", parse_combo_operand(operand)).unwrap();
-            }
+                Opcode::Bdv => {
+                    writeln!(output, "        b = a / 2u32.pow({});", parse_combo_operand(operand)).unwrap();
+                }
 
-            Opcode::Bdv => {
-                writeln!(output, "        b = a / 2u32.pow({});", parse_combo_operand(operand)).unwrap();
+                Opcode::Cdv => {
+                    writeln!(output, "        c = a / 2u32.pow({});", parse_combo_operand(operand)).unwrap();
+                }
             }
-
-            Opcode::Cdv => {
-                writeln!(output, "        c = a / 2u32.pow({});", parse_combo_operand(operand)).unwrap();
-            }
-        }
         }
 
         writeln!(output, "        break;").unwrap();
@@ -183,7 +188,6 @@ impl Computer {
             _ => unreachable!(),
         }
     }
-
 }
 
 #[inline]
@@ -196,9 +200,17 @@ pub fn solve() -> (impl Display, impl Display) {
     let b_value = lines.next().unwrap().split_once(": ").unwrap().1.parse().unwrap();
     let c_value = lines.next().unwrap().split_once(": ").unwrap().1.parse().unwrap();
     lines.next(); // skip empty line
-    let program = lines.next().unwrap().split_once(": ").unwrap().1.split(',').map(|s| s.parse().unwrap()).collect();
+    let program = lines
+        .next()
+        .unwrap()
+        .split_once(": ")
+        .unwrap()
+        .1
+        .split(',')
+        .map(|s| s.parse().unwrap())
+        .collect();
 
-    let mut computer = Computer {
+    let computer = Computer {
         registers: [a_value, b_value, c_value],
         pc: 0,
         program,
@@ -206,14 +218,31 @@ pub fn solve() -> (impl Display, impl Display) {
     };
     // std::fs::write("output.rs", computer.compile()).unwrap();
 
+    let p1 = solve_part1(computer);
+    let p2 = solve_part2();
+
+    (p1, p2)
+}
+
+fn solve_part1(mut computer: Computer) -> String {
     while computer.step() {}
 
-    let p1 = computer.output.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",");
-    
-use z3::{ast::BV, ast::Ast, ast::Bool, Config, Context, Solver};
+    computer
+        .output
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn solve_part2() -> u64 {
+    use z3::{
+        ast::{Ast, Bool, BV},
+        Config, Context, Solver,
+    };
 
     // This corresponds to the Python array 'e'.
-    let e = [2,4,1,7,7,5,0,3,1,7,4,1,5,5,3,0];
+    let e = [2, 4, 1, 7, 7, 5, 0, 3, 1, 7, 4, 1, 5, 5, 3, 0];
 
     // Each element of 'e' is constrained via 3 bits of 'a'.
     let bitlen = e.len() * 3;
@@ -253,16 +282,12 @@ use z3::{ast::BV, ast::Ast, ast::Bool, Config, Context, Solver};
         offset += 3;
     }
 
-    let p2;
     match solver.check() {
         z3::SatResult::Sat => {
-            println!("SAT");
             let model = solver.get_model().unwrap();
-            p2 = model.eval(&a, true).unwrap().as_u64().unwrap();
-        },
+            model.eval(&a, true).unwrap().as_u64().unwrap()
+        }
         z3::SatResult::Unsat => unreachable!(),
         z3::SatResult::Unknown => unreachable!(),
     }
-
-    (p1, p2)
 }
