@@ -122,10 +122,8 @@ pub fn solve() -> (impl Display, impl Display) {
     let mut lines = input.lines();
 
     let a_value = lines.next().unwrap().split_once(": ").unwrap().1.parse().unwrap();
-    let b_value = lines.next().unwrap().split_once(": ").unwrap().1.parse().unwrap();
-    let c_value = lines.next().unwrap().split_once(": ").unwrap().1.parse().unwrap();
-    lines.next(); // skip empty line
     let program = lines
+        .skip(3)
         .next()
         .unwrap()
         .split_once(": ")
@@ -136,7 +134,7 @@ pub fn solve() -> (impl Display, impl Display) {
         .collect::<Vec<_>>();
 
     let computer = Computer {
-        registers: [a_value, b_value, c_value],
+        registers: [a_value, 0, 0],
         pc: 0,
         output: None,
     };
