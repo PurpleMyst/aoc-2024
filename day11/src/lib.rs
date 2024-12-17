@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
-use rustc_hash::FxHashMap;
 use memoize::memoize;
+use rustc_hash::FxHashMap;
 
 fn num_digits(n: u64) -> u64 {
     n.ilog10() as u64 + 1
