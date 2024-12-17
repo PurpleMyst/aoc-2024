@@ -1,6 +1,6 @@
-use std::{fmt::Display, iter::once};
+use std::fmt::Display;
 
-type Number = i64;
+type Number = u64;
 
 enum Opcode {
     Adv,
@@ -44,20 +44,19 @@ impl From<u8> for Opcode {
     }
 }
 
+#[derive(Clone, Copy)]
 struct Computer {
     registers: [Number; 3],
     pc: usize,
-    program: Vec<u8>,
-
-    output: Vec<Number>,
+    output: Option<Number>,
 }
 
 impl Computer {
-    fn step(&mut self) -> bool {
-        let Some(opcode) = self.program.get(self.pc).copied().map(Opcode::from) else {
+    fn step(&mut self, program: &[u8]) -> bool {
+        let Some(opcode) = program.get(self.pc).copied().map(Opcode::from) else {
             return false;
         };
-        let operand = self.program[self.pc + 1];
+        let operand = program[self.pc + 1];
         self.pc += 2;
 
         match opcode {
@@ -84,7 +83,7 @@ impl Computer {
             }
 
             Opcode::Out => {
-                self.output.push(self.parse_combo_operand(operand) & 0b111);
+                self.output = Some(self.parse_combo_operand(operand) & 0b111);
             }
 
             Opcode::Bdv => {
@@ -101,83 +100,9 @@ impl Computer {
         true
     }
 
-    #[allow(dead_code)]
-    fn compile(&self) -> String {
-        use std::fmt::Write;
-
-        let mut output = String::new();
-
-        writeln!(output, "fn main() {{").unwrap();
-        writeln!(output, "    let mut a = {};", self.registers[0]).unwrap();
-        writeln!(output, "    let mut b = {};", self.registers[1]).unwrap();
-        writeln!(output, "    let mut c = {};", self.registers[2]).unwrap();
-        writeln!(output, "").unwrap();
-        writeln!(output, "    loop {{").unwrap();
-
-        let parse_combo_operand = |operand: u8| -> &str {
-            match operand {
-                0 => "0",
-                1 => "1",
-                2 => "2",
-                3 => "3",
-                4 => "a",
-                5 => "b",
-                6 => "c",
-                _ => unreachable!(),
-            }
-        };
-
-        for chunk in self.program.chunks(2) {
-            let opcode = chunk[0];
-            let operand = chunk[1];
-
-            match Opcode::from(opcode) {
-                Opcode::Adv => {
-                    writeln!(output, "        a /= 2u32.pow({});", parse_combo_operand(operand)).unwrap();
-                }
-
-                Opcode::Bxl => {
-                    writeln!(output, "        b ^= {};", operand).unwrap();
-                }
-
-                Opcode::Bst => {
-                    writeln!(output, "        b = {} & 0b111;", parse_combo_operand(operand)).unwrap();
-                }
-
-                Opcode::Jnz => {
-                    debug_assert_eq!(operand, 0);
-                    writeln!(output, "        if a != 0 {{").unwrap();
-                    writeln!(output, "            continue;").unwrap();
-                    writeln!(output, "        }}").unwrap();
-                }
-
-                Opcode::Bxc => {
-                    writeln!(output, "        b ^= c;").unwrap();
-                }
-
-                Opcode::Out => {
-                    writeln!(
-                        output,
-                        "        println!(\"{{}}\", {} & 0b111);",
-                        parse_combo_operand(operand)
-                    )
-                    .unwrap();
-                }
-
-                Opcode::Bdv => {
-                    writeln!(output, "        b = a / 2u32.pow({});", parse_combo_operand(operand)).unwrap();
-                }
-
-                Opcode::Cdv => {
-                    writeln!(output, "        c = a / 2u32.pow({});", parse_combo_operand(operand)).unwrap();
-                }
-            }
-        }
-
-        writeln!(output, "        break;").unwrap();
-        writeln!(output, "    }}").unwrap();
-        writeln!(output, "}}").unwrap();
-        output
+    fn step_until_output(&mut self, program: &[u8]) -> Option<Number> {
+        while self.output.is_none() && self.step(program) {}
+        self.output.take()
     }
 
     fn parse_combo_operand(&self, operand: u8) -> Number {
@@ -208,86 +133,43 @@ pub fn solve() -> (impl Display, impl Display) {
         .1
         .split(',')
         .map(|s| s.parse().unwrap())
-        .collect();
+        .collect::<Vec<_>>();
 
     let computer = Computer {
         registers: [a_value, b_value, c_value],
         pc: 0,
-        program,
-        output: Vec::new(),
+        output: None,
     };
-    // std::fs::write("output.rs", computer.compile()).unwrap();
 
-    let p1 = solve_part1(computer);
-    let p2 = solve_part2();
+    let p1 = solve_part1(&program, computer);
+    let p2 = solve_part2(&program, computer, program.len() - 1, 0).unwrap();
 
     (p1, p2)
 }
 
-fn solve_part1(mut computer: Computer) -> String {
-    while computer.step() {}
-
-    computer
-        .output
-        .iter()
+fn solve_part1(program: &[u8], mut computer: Computer) -> String {
+    std::iter::from_fn(|| computer.step_until_output(program))
         .map(|n| n.to_string())
         .collect::<Vec<_>>()
         .join(",")
 }
 
-fn solve_part2() -> u64 {
-    use z3::{
-        ast::{Ast, Bool, BV},
-        Config, Context, Solver,
-    };
-
-    // This corresponds to the Python array 'e'.
-    let e = [2, 4, 1, 7, 7, 5, 0, 3, 1, 7, 4, 1, 5, 5, 3, 0];
-
-    // Each element of 'e' is constrained via 3 bits of 'a'.
-    let bitlen = e.len() * 3;
-
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let solver = Solver::new(&ctx);
-
-    // Create the bitvector 'a' with length bitlen.
-    let a = BV::new_const(&ctx, "a", bitlen as u32);
-
-    let mut offset = 0;
-    for &k in &e {
-        // Construct a bitvector for the offset.
-        let offset_bv = BV::from_u64(&ctx, offset as u64, bitlen as u32);
-
-        // a_ = a >> offset  (logical right shift)
-        let a_shifted = a.bvashr(&offset_bv);
-
-        // n = a_ & 7
-        let n = a_shifted.bvand(&BV::from_u64(&ctx, 7, bitlen as u32));
-
-        // n_xor_7 = n ^ 7
-        let n_xor_7 = n.bvxor(&BV::from_u64(&ctx, 7, bitlen as u32));
-
-        // p = (a_ >> (n ^ 7)) & 7
-        // We must shift by n_xor_7, which is also a bitvector.
-        let p_shifted = a_shifted.bvashr(&n_xor_7);
-        let p = p_shifted.bvand(&BV::from_u64(&ctx, 7, bitlen as u32));
-
-        // Constraint: (n ^ p) == k
-        let n_xor_p = n.bvxor(&p);
-        let k_bv = BV::from_u64(&ctx, k as u64, bitlen as u32);
-        let constraint: Bool = n_xor_p._eq(&k_bv);
-
-        solver.assert(&constraint);
-        offset += 3;
-    }
-
-    match solver.check() {
-        z3::SatResult::Sat => {
-            let model = solver.get_model().unwrap();
-            model.eval(&a, true).unwrap().as_u64().unwrap()
-        }
-        z3::SatResult::Unsat => unreachable!(),
-        z3::SatResult::Unknown => unreachable!(),
-    }
+// adapted from u/mental-chaos
+fn solve_part2(program: &[u8], computer: Computer, cursor: usize, a: Number) -> Option<u64> {
+    (0..8)
+        .filter_map(|c| {
+            let new_a = (a << 3) | c;
+            let mut computer = computer;
+            computer.registers[0] = new_a;
+            if computer.step_until_output(program)? == program[cursor].into() {
+                Some(if cursor == 0 {
+                    new_a
+                } else {
+                    solve_part2(program, computer, cursor - 1, new_a)?
+                })
+            } else {
+                None
+            }
+        })
+        .min()
 }

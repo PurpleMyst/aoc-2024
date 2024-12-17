@@ -2,6 +2,3 @@
 name = "day17"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-z3 = {version="0.12", features = ["static-link-z3"]}
