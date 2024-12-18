@@ -4,7 +4,7 @@ const EMPTY: i16 = -1;
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
-    rayon::join(|| solve_part1(), || solve_part2())
+    rayon::join(solve_part1, solve_part2)
 }
 
 fn solve_part1() -> u64 {

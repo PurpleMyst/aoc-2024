@@ -15,7 +15,7 @@ impl State {
             {
                 let next_y = self.pos.0.wrapping_add_signed(self.dir.0);
                 let next_x = self.pos.1.wrapping_add_signed(self.dir.1);
-                (walkable[usize::from(next_y) * usize::from(side) + usize::from(next_x)]).then(|| {
+                (walkable[usize::from(next_y) * side + usize::from(next_x)]).then_some({
                     (
                         Self {
                             pos: (next_y, next_x),
@@ -45,7 +45,7 @@ impl State {
     }
 
     // branchless to_index
-    fn to_index(&self, side: usize) -> usize {
+    fn to_index(self, side: usize) -> usize {
         let pos_index = (usize::from(self.pos.0) * side + usize::from(self.pos.1)) * 4;
         let dir0_pos = (self.dir.0 > 0) as usize; // 1 if dir.0 > 0, else 0
         let dir0_neg = (self.dir.0 < 0) as usize; // 1 if dir.0 < 0, else 0
@@ -59,7 +59,7 @@ impl State {
             {
                 let next_y = self.pos.0.wrapping_add_signed(-self.dir.0);
                 let next_x = self.pos.1.wrapping_add_signed(-self.dir.1);
-                (walkable[usize::from(next_y) * usize::from(side) + usize::from(next_x)]).then(|| {
+                (walkable[usize::from(next_y) * side + usize::from(next_x)]).then_some({
                     (
                         Self {
                             pos: (next_y, next_x),

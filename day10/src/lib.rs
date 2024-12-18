@@ -21,7 +21,7 @@ impl State {
             let new_x = x.checked_add_signed(dx)?;
             let new_pos = (new_y, new_x);
             let &new_cell = grid.get(new_y, new_x)?;
-            (new_cell == cell + 1).then(|| State { pos: new_pos })
+            (new_cell == cell + 1).then_some(State { pos: new_pos })
         })
     }
 }

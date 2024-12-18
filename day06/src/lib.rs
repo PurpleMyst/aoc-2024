@@ -70,10 +70,10 @@ fn do_solve(
         for ((dy, dx), visited) in DIRECTIONS.into_iter().zip(&mut visited_by_dir) {
             loop {
                 let idx = pos2idx(y, x);
-                if visited.contains(usize::from(idx)) {
+                if visited.contains(idx) {
                     return (visited_by_dir, true);
                 }
-                visited.insert(usize::from(idx));
+                visited.insert(idx);
 
                 // Move into the new direction, checking if we go out of bounds.
                 // Since SIDE is small enough, overflow'll never happen and underflow is beneficial (it allows us to

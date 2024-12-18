@@ -13,13 +13,7 @@ const EMPTY: u8 = b'.';
 const WIDE_BOX_LEFT: u8 = b'[';
 const WIDE_BOX_RIGHT: u8 = b']';
 
-fn do_move(
-    map: &mut [u8],
-    (y, x): (usize, usize),
-    width: usize,
-    height: usize,
-    (dy, dx): (isize, isize),
-) -> Option<(usize, usize)> {
+fn do_move(map: &mut [u8], (y, x): (usize, usize), width: usize, (dy, dx): (isize, isize)) -> Option<(usize, usize)> {
     let cur_idx = y * width + x;
 
     let next_y = y.wrapping_add_signed(dy);
@@ -37,7 +31,7 @@ fn do_move(
         WALL => None,
 
         BOX => {
-            if do_move(map, (next_y, next_x), width, height, (dy, dx)).is_some() {
+            if do_move(map, (next_y, next_x), width, (dy, dx)).is_some() {
                 map[next_idx] = map[cur_idx];
                 map[cur_idx] = EMPTY;
                 Some((next_y, next_x))
@@ -47,7 +41,7 @@ fn do_move(
         }
 
         WIDE_BOX_LEFT | WIDE_BOX_RIGHT if dy == 0 => {
-            if do_move(map, (next_y, next_x), width, height, (dy, dx)).is_some() {
+            if do_move(map, (next_y, next_x), width, (dy, dx)).is_some() {
                 map[next_idx] = map[cur_idx];
                 map[cur_idx] = EMPTY;
                 Some((next_y, next_x))
@@ -61,16 +55,8 @@ fn do_move(
             let old_map = map.to_owned();
 
             // both the halves have to move in the vertical dir
-            if do_move(map, (next_y, next_x), width, height, (dy, dx)).is_some() {
-                if do_move(
-                    map,
-                    (next_y, next_x.wrapping_add_signed(partner_dx)),
-                    width,
-                    height,
-                    (dy, dx),
-                )
-                .is_some()
-                {
+            if do_move(map, (next_y, next_x), width, (dy, dx)).is_some() {
+                if do_move(map, (next_y, next_x.wrapping_add_signed(partner_dx)), width, (dy, dx)).is_some() {
                     map[next_idx] = map[cur_idx];
                     map[cur_idx] = EMPTY;
                     Some((next_y, next_x))
@@ -94,17 +80,16 @@ pub fn solve() -> (impl Display, impl Display) {
     let (map, moves) = input.split_once("\n\n").unwrap();
 
     let width = map.lines().next().unwrap().len();
-    let height = width;
 
     let map = map.bytes().filter(|&b| b != b'\n').collect::<Vec<_>>();
 
     rayon::join(
-        || do_solve::<false>(map.clone(), width, moves, height),
-        || do_solve::<true>(map.clone(), width, moves, height),
+        || do_solve::<false>(map.clone(), width, moves),
+        || do_solve::<true>(map.clone(), width, moves),
     )
 }
 
-fn do_solve<const PART2: bool>(mut map: Vec<u8>, mut width: usize, moves: &str, height: usize) -> usize {
+fn do_solve<const PART2: bool>(mut map: Vec<u8>, mut width: usize, moves: &str) -> usize {
     if PART2 {
         map = map
             .into_iter()
@@ -133,7 +118,7 @@ fn do_solve<const PART2: bool>(mut map: Vec<u8>, mut width: usize, moves: &str, 
             _ => unreachable!(),
         };
 
-        if let Some((y, x)) = do_move(&mut map, (robot_y, robot_x), width, height, dir) {
+        if let Some((y, x)) = do_move(&mut map, (robot_y, robot_x), width, dir) {
             robot_y = y;
             robot_x = x;
         }

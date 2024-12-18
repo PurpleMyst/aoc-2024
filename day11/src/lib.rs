@@ -24,7 +24,7 @@ fn stones(n: u64, steps_left: usize) -> usize {
         return stones(left, steps_left - 1) + stones(right, steps_left - 1);
     }
 
-    return stones(n * 2024, steps_left - 1);
+    stones(n * 2024, steps_left - 1)
 }
 
 #[inline]

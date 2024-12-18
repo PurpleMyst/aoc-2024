@@ -123,8 +123,7 @@ pub fn solve() -> (impl Display, impl Display) {
 
     let a_value = lines.next().unwrap().split_once(": ").unwrap().1.parse().unwrap();
     let program = lines
-        .skip(3)
-        .next()
+        .nth(3)
         .unwrap()
         .split_once(": ")
         .unwrap()
