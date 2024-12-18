@@ -1,0 +1,8 @@
+[package]
+name = "day18"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fixedbitset = "0.5.7"
+pathfinding = "4.12.0"
