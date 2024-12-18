@@ -109,8 +109,7 @@ impl Computer {
         match operand {
             0..=3 => operand.into(),
             4..=6 => self.registers[operand as usize - 4],
-            7 => panic!("got 7... reserved, but mysterious"),
-            _ => unreachable!(),
+            _ => unsafe { std::hint::unreachable_unchecked() },
         }
     }
 }
