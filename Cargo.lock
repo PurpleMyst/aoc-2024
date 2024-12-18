@@ -332,6 +332,7 @@ version = "0.1.0"
 dependencies = [
  "fixedbitset 0.5.7",
  "pathfinding",
+ "rayon",
 ]
 
 [[package]]
