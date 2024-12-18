@@ -2,7 +2,12 @@ use std::{collections::VecDeque, fmt::Display};
 
 use fixedbitset::FixedBitSet;
 
-const SIDE: usize = 71;
+const SIDE: u8 = 71;
+const MAP_SIZE: usize = SIDE as usize * SIDE as usize;
+
+fn pos2idx(x: u8, y: u8) -> usize {
+    usize::from(y) * usize::from(SIDE) + usize::from(x)
+}
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
@@ -10,14 +15,14 @@ pub fn solve() -> (impl Display, impl Display) {
     rayon::join(|| solve_part1(input), || solve_part2(input))
 }
 
-fn solve_part1(input: &str) -> usize {
-    let mut walls = FixedBitSet::with_capacity(SIDE * SIDE);
+fn solve_part1(input: &str) -> u16 {
+    let mut walls = FixedBitSet::with_capacity(MAP_SIZE);
 
     input.lines().take(1024).for_each(|line| {
         let (x, y) = line.split_once(',').unwrap();
-        let x = x.parse::<usize>().unwrap();
-        let y = y.parse::<usize>().unwrap();
-        walls.insert(y * SIDE + x);
+        let x = x.parse::<u8>().unwrap();
+        let y = y.parse::<u8>().unwrap();
+        walls.insert(pos2idx(x, y));
     });
 
     pathfinding::prelude::astar(
@@ -30,12 +35,12 @@ fn solve_part1(input: &str) -> usize {
                 (x, y.wrapping_sub(1)),
             ]
             .into_iter()
-            .filter(|&(x, y)| usize::from(x) < SIDE && usize::from(y) < SIDE)
-            .filter(|&(x, y)| !walls.contains(usize::from(y) * SIDE + usize::from(x)))
+            .filter(|&(x, y)| x < SIDE && y < SIDE)
+            .filter(|&(x, y)| !walls.contains(pos2idx(x, y)))
             .map(|(x, y)| ((x, y), 1))
         },
-        |&(x, y)| usize::from(x).abs_diff(SIDE - 1) + usize::from(y).abs_diff(SIDE - 1),
-        |&(x, y)| usize::from(x) == (SIDE - 1) && usize::from(y) == (SIDE - 1),
+        |&(x, y)| u16::from(x.abs_diff(SIDE - 1)) + u16::from(y.abs_diff(SIDE - 1)),
+        |&(x, y)| x == (SIDE - 1) && y == (SIDE - 1),
     )
     .unwrap()
     .1
@@ -48,19 +53,19 @@ fn solve_part2(input: &str) -> &str {
         .lines()
         .map(|line| {
             let (x, y) = line.split_once(',').unwrap();
-            let x = x.parse::<usize>().unwrap();
-            let y = y.parse::<usize>().unwrap();
+            let x = x.parse::<u8>().unwrap();
+            let y = y.parse::<u8>().unwrap();
             (x, y)
         })
         .collect::<Vec<_>>();
 
-    let mut walls = FixedBitSet::with_capacity(SIDE * SIDE);
-    walls_in_order.iter().for_each(|&(x, y)| walls.insert(y * SIDE + x));
+    let mut walls = FixedBitSet::with_capacity(MAP_SIZE);
+    walls_in_order.iter().for_each(|&(x, y)| walls.insert(pos2idx(x, y)));
 
     let mut queue = VecDeque::new();
-    let mut visited = FixedBitSet::with_capacity(SIDE * SIDE);
+    let mut visited = FixedBitSet::with_capacity(MAP_SIZE);
 
-    queue.push_back((0, 0));
+    queue.push_back((0u8, 0u8));
 
     loop {
         while let Some((x, y)) = queue.pop_front() {
@@ -68,7 +73,7 @@ fn solve_part2(input: &str) -> &str {
                 return input.lines().nth(walls.count_ones(..)).unwrap();
             }
 
-            visited.insert(y * SIDE + x);
+            visited.insert(pos2idx(x, y));
 
             queue.extend(
                 [
@@ -79,14 +84,13 @@ fn solve_part2(input: &str) -> &str {
                 ]
                 .into_iter()
                 .filter(|&(x, y)| x < SIDE && y < SIDE)
-                .filter(|&(x, y)| !walls.contains(y * SIDE + x))
-                .filter(|&(x, y)| !visited.contains(y * SIDE + x)),
+                .filter(|&(x, y)| !walls.contains(pos2idx(x, y)))
+                .filter(|&(x, y)| !visited.contains(pos2idx(x, y)))
             )
         }
 
         let (x, y) = walls_in_order.pop().unwrap();
-        let idx = y * SIDE + x;
-        walls.remove(idx);
+        walls.remove(pos2idx(x, y));
 
         if [
             (x.wrapping_add(1), y),
@@ -96,9 +100,9 @@ fn solve_part2(input: &str) -> &str {
         ]
         .into_iter()
         .filter(|&(x, y)| x < SIDE && y < SIDE)
-        .any(|(x, y)| visited.contains(y * SIDE + x))
+        .any(|(x, y)| visited.contains(pos2idx(x, y)))
         {
-            queue.push_back((x, y));
+            queue.push_back((x as u8, y as u8));
         }
     }
 }
