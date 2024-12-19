@@ -45,6 +45,7 @@ dependencies = [
  "day16",
  "day17",
  "day18",
+ "day19",
  "iai",
 ]
 
@@ -333,6 +334,15 @@ dependencies = [
  "fixedbitset 0.5.7",
  "pathfinding",
  "rayon",
+]
+
+[[package]]
+name = "day19"
+version = "0.1.0"
+dependencies = [
+ "memoize",
+ "rayon",
+ "rustc-hash",
 ]
 
 [[package]]
