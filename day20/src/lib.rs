@@ -5,11 +5,6 @@ use rayon::prelude::*;
 
 type Point = (u8, u8);
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-struct State {
-    pos: Point,
-}
-
 #[inline]
 fn neighbors((y, x): Point) -> [Point; 4] {
     [
@@ -18,31 +13,6 @@ fn neighbors((y, x): Point) -> [Point; 4] {
         (y, x.wrapping_sub(1)),
         (y, x.wrapping_add(1)),
     ]
-}
-
-impl State {
-    fn step(self, side: u8, walls: &FixedBitSet) -> impl Iterator<Item = Self> + '_ {
-        neighbors(self.pos)
-            .into_iter()
-            .filter(move |&(y, x)| y < side && x < side)
-            .filter(move |&(y, x)| !walls.contains(usize::from(y) * usize::from(side) + usize::from(x)))
-            .map(|pos| State { pos })
-    }
-
-    fn cheat<const STEPS: i8>(self, side: u8, walls: &FixedBitSet) -> impl Iterator<Item = (usize, Self)> + '_ {
-        (-STEPS..=STEPS)
-            .flat_map(move |dy| (-STEPS..=STEPS).map(move |dx| (dy, dx)))
-            .filter(|&(dy, dx)| dy.abs() + dx.abs() <= STEPS)
-            .map(move |(dy, dx)| (self.pos.0.wrapping_add_signed(dy), self.pos.1.wrapping_add_signed(dx)))
-            .filter(move |&(y, x)| y < side && x < side)
-            .filter(move |&(y, x)| !walls.contains(usize::from(y) * usize::from(side) + usize::from(x)))
-            .map(move |pos| {
-                (
-                    usize::from(self.pos.0.abs_diff(pos.0)) + usize::from(self.pos.1.abs_diff(pos.1)),
-                    State { pos },
-                )
-            })
-    }
 }
 
 #[inline]
@@ -73,27 +43,57 @@ pub fn solve() -> (impl Display, impl Display) {
 }
 
 fn do_solve<const STEPS: i8>(start: (u8, u8), side: u8, walls: &FixedBitSet, end: (u8, u8)) -> usize {
-    let states = pathfinding::prelude::bfs(
-        &State { pos: start },
-        |state| state.step(side, &walls),
-        |state| state.pos == end,
-    )
-    .unwrap();
-    let base_time = states.len() - 1;
+    let (start_dist_map, end_dist_map) = rayon::join(
+        || compute_dist_map(side, start, walls),
+        || compute_dist_map(side, end, walls),
+    );
 
-    let cheats = states
-        .into_iter()
-        .enumerate()
-        .flat_map(|(t, state0)| {
-            state0
-                .cheat::<STEPS>(side, &walls)
-                .map(move |(t0, state)| (t0 + t, state0.pos, state))
+    let base_time = start_dist_map[usize::from(end.0) * usize::from(side) + usize::from(end.1)];
+
+    (0..side)
+        .into_par_iter()
+        .flat_map(move |y| (0..side).into_par_iter().map(move |x| (y, x)))
+        .filter(|&(src_y, src_x)| {
+            start_dist_map[usize::from(src_y) * usize::from(side) + usize::from(src_x)] != usize::MAX
         })
-        .collect::<rustc_hash::FxHashSet<_>>();
+        .flat_map(|(src_y, src_x)| {
+            (-STEPS..=STEPS)
+                .into_par_iter()
+                .flat_map(move |dy| (-STEPS..=STEPS).into_par_iter().map(move |dx| (dy, dx)))
+                .filter(move |&(dy, dx)| {
+                    let jump = dy.abs() + dx.abs();
+                    jump <= STEPS
+                })
+                .map(move |(dy, dx)| {
+                    (
+                        src_y,
+                        src_x,
+                        src_y.wrapping_add_signed(dy),
+                        src_x.wrapping_add_signed(dx),
+                    )
+                })
+                .filter(move |&(_src_y, _src_x, dst_y, dst_x)| {
+                    dst_y < side
+                        && dst_x < side
+                        && !walls.contains(usize::from(dst_y) * usize::from(side) + usize::from(dst_x))
+                })
+        })
+        .filter(|&(src_y, src_x, dst_y, dst_x)| {
+            let src_idx = usize::from(src_y) * usize::from(side) + usize::from(src_x);
+            let dst_idx = usize::from(dst_y) * usize::from(side) + usize::from(dst_x);
+            start_dist_map[src_idx]
+                + end_dist_map[dst_idx]
+                + src_y.abs_diff(dst_y) as usize
+                + src_x.abs_diff(dst_x) as usize
+                <= base_time - 100
+        })
+        .count()
+}
 
+fn compute_dist_map(side: u8, from_: (u8, u8), walls: &FixedBitSet) -> Vec<usize> {
     let mut dist_map = vec![usize::MAX; usize::from(side) * usize::from(side)];
 
-    let mut states = vec![end];
+    let mut states = vec![from_];
     let mut new_states = Vec::new();
     let mut visited = FixedBitSet::with_capacity(usize::from(side) * usize::from(side));
 
@@ -122,10 +122,5 @@ fn do_solve<const STEPS: i8>(start: (u8, u8), side: u8, walls: &FixedBitSet, end
         t += 1;
         std::mem::swap(&mut states, &mut new_states);
     }
-
-    cheats
-        .into_par_iter()
-        .map(|(t0, _, state)| t0 + dist_map[usize::from(state.pos.0) * usize::from(side) + usize::from(state.pos.1)])
-        .filter(|&t| t <= base_time - 100)
-        .count()
+    dist_map
 }
