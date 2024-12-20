@@ -20,46 +20,37 @@ pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
     let side = u8::try_from(input.lines().next().unwrap().len()).unwrap();
 
-    let mut start = (u8::MAX, u8::MAX);
     let mut end = (u8::MAX, u8::MAX);
     let mut walls = FixedBitSet::with_capacity(usize::from(side) * usize::from(side));
 
     for (y, row) in input.lines().enumerate() {
         for (x, cell) in row.bytes().enumerate() {
             match cell {
-                b'S' => start = (y as u8, x as u8),
                 b'E' => end = (y as u8, x as u8),
                 b'#' => walls.insert(usize::from(y) * usize::from(side) + usize::from(x)),
-                b'.' | b'\n' => (),
+                b'S' | b'.' | b'\n' => (),
                 _ => unreachable!("{cell:?}"),
             }
         }
     }
 
     rayon::join(
-        || do_solve::<2>(start, side, &walls, end),
-        || do_solve::<20>(start, side, &walls, end),
+        || do_solve::<2>(side, &walls, end),
+        || do_solve::<20>(side, &walls, end),
     )
 }
 
-fn do_solve<const STEPS: i8>(start: (u8, u8), side: u8, walls: &FixedBitSet, end: (u8, u8)) -> usize {
-    let (start_dist_map, end_dist_map) = rayon::join(
-        || compute_dist_map(side, start, walls),
-        || compute_dist_map(side, end, walls),
-    );
-
-    let base_time = start_dist_map[usize::from(end.0) * usize::from(side) + usize::from(end.1)];
+fn do_solve<const STEPS: i8>(side: u8, walls: &FixedBitSet, end: (u8, u8)) -> usize {
+    // Assumption: there's only one path from the start to the end
+    let end_dist_map = compute_dist_map(side, end, walls);
 
     (0..side)
         .into_par_iter()
         .flat_map(move |y| (0..side).into_par_iter().map(move |x| (y, x)))
-        .filter(|&(src_y, src_x)| {
-            start_dist_map[usize::from(src_y) * usize::from(side) + usize::from(src_x)] != usize::MAX
-        })
-        .flat_map(|(src_y, src_x)| {
+        .filter(|&(src_y, src_x)| !walls.contains(usize::from(src_y) * usize::from(side) + usize::from(src_x)))
+        .flat_map_iter(|(src_y, src_x)| {
             (-STEPS..=STEPS)
-                .into_par_iter()
-                .flat_map(move |dy| (-STEPS..=STEPS).into_par_iter().map(move |dx| (dy, dx)))
+                .flat_map(move |dy| (-STEPS..=STEPS).map(move |dx| (dy, dx)))
                 .filter(move |&(dy, dx)| {
                     let jump = dy.abs() + dx.abs();
                     jump <= STEPS
@@ -81,17 +72,16 @@ fn do_solve<const STEPS: i8>(start: (u8, u8), side: u8, walls: &FixedBitSet, end
         .filter(|&(src_y, src_x, dst_y, dst_x)| {
             let src_idx = usize::from(src_y) * usize::from(side) + usize::from(src_x);
             let dst_idx = usize::from(dst_y) * usize::from(side) + usize::from(dst_x);
-            start_dist_map[src_idx]
-                + end_dist_map[dst_idx]
-                + src_y.abs_diff(dst_y) as usize
-                + src_x.abs_diff(dst_x) as usize
-                <= base_time - 100
+            end_dist_map[src_idx] as i16
+                - end_dist_map[dst_idx] as i16
+                - (src_y.abs_diff(dst_y) as i16 + src_x.abs_diff(dst_x) as i16)
+                >= 100
         })
         .count()
 }
 
-fn compute_dist_map(side: u8, from_: (u8, u8), walls: &FixedBitSet) -> Vec<usize> {
-    let mut dist_map = vec![usize::MAX; usize::from(side) * usize::from(side)];
+fn compute_dist_map(side: u8, from_: (u8, u8), walls: &FixedBitSet) -> Vec<u16> {
+    let mut dist_map = vec![u16::MAX; usize::from(side) * usize::from(side)];
 
     let mut states = vec![from_];
     let mut new_states = Vec::new();
