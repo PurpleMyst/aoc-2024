@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use fixedbitset::FixedBitSet;
-use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
 
 type Point = (u8, u8);
@@ -56,21 +55,21 @@ pub fn solve() -> (impl Display, impl Display) {
     let mut walls = FixedBitSet::with_capacity(usize::from(side) * usize::from(side));
 
     for (y, row) in input.lines().enumerate() {
-        for (x, cell) in row.chars().enumerate() {
+        for (x, cell) in row.bytes().enumerate() {
             match cell {
-                'S' => start = (y as u8, x as u8),
-                'E' => end = (y as u8, x as u8),
-                '#' => walls.insert(usize::from(y) * usize::from(side) + usize::from(x)),
-                '.' | '\n' => (),
+                b'S' => start = (y as u8, x as u8),
+                b'E' => end = (y as u8, x as u8),
+                b'#' => walls.insert(usize::from(y) * usize::from(side) + usize::from(x)),
+                b'.' | b'\n' => (),
                 _ => unreachable!("{cell:?}"),
             }
         }
     }
 
-    let p1 = do_solve::<2>(start, side, &walls, end);
-    let p2 = do_solve::<20>(start, side, &walls, end);
-
-    (p1, p2)
+    rayon::join(
+        || do_solve::<2>(start, side, &walls, end),
+        || do_solve::<20>(start, side, &walls, end),
+    )
 }
 
 fn do_solve<const STEPS: i8>(start: (u8, u8), side: u8, walls: &FixedBitSet, end: (u8, u8)) -> usize {
@@ -91,21 +90,42 @@ fn do_solve<const STEPS: i8>(start: (u8, u8), side: u8, walls: &FixedBitSet, end
                 .map(move |(t0, state)| (t0 + t, state0.pos, state))
         })
         .collect::<rustc_hash::FxHashSet<_>>();
-    let n = cheats.len();
+
+    let mut dist_map = vec![usize::MAX; usize::from(side) * usize::from(side)];
+
+    let mut states = vec![end];
+    let mut new_states = Vec::new();
+    let mut visited = FixedBitSet::with_capacity(usize::from(side) * usize::from(side));
+
+    let mut t = 0;
+    while !states.is_empty() {
+        for state in states.drain(..) {
+            let idx = usize::from(state.0) * usize::from(side) + usize::from(state.1);
+            if visited.contains(idx) {
+                continue;
+            }
+            visited.insert(idx);
+
+            dist_map[idx] = t;
+
+            for neighbor in neighbors(state) {
+                if neighbor.0 >= side || neighbor.1 >= side {
+                    continue;
+                }
+                let idx = usize::from(neighbor.0) * usize::from(side) + usize::from(neighbor.1);
+                if walls.contains(idx) || visited.contains(idx) {
+                    continue;
+                }
+                new_states.push(neighbor);
+            }
+        }
+        t += 1;
+        std::mem::swap(&mut states, &mut new_states);
+    }
 
     cheats
         .into_par_iter()
-        .progress_count(n as u64)
-        .map(|(t0, _, state)| {
-            t0 + pathfinding::prelude::astar(
-                &state,
-                |state| state.step(side, &walls).map(|state| (state, 1)),
-                |state| usize::from(state.pos.0.abs_diff(end.0)) + usize::from(state.pos.1.abs_diff(end.1)),
-                |state| state.pos == end,
-            )
-            .unwrap()
-            .1
-        })
+        .map(|(t0, _, state)| t0 + dist_map[usize::from(state.pos.0) * usize::from(side) + usize::from(state.pos.1)])
         .filter(|&t| t <= base_time - 100)
         .count()
 }
