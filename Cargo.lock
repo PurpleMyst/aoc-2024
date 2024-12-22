@@ -395,7 +395,7 @@ dependencies = [
 name = "day22"
 version = "0.1.0"
 dependencies = [
- "indicatif",
+ "fixedbitset 0.5.7",
  "itertools 0.13.0",
  "rayon",
  "rustc-hash",
