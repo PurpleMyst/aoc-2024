@@ -387,6 +387,7 @@ dependencies = [
  "pathfinding",
  "rand",
  "rayon",
+ "rustc-hash",
 ]
 
 [[package]]
