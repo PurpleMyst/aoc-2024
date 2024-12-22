@@ -48,6 +48,7 @@ dependencies = [
  "day19",
  "day20",
  "day21",
+ "day22",
  "iai",
 ]
 
@@ -386,6 +387,16 @@ dependencies = [
  "owo-colors",
  "pathfinding",
  "rand",
+ "rayon",
+ "rustc-hash",
+]
+
+[[package]]
+name = "day22"
+version = "0.1.0"
+dependencies = [
+ "indicatif",
+ "itertools 0.13.0",
  "rayon",
  "rustc-hash",
 ]

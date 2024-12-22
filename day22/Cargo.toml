@@ -1,0 +1,10 @@
+[package]
+name = "day22"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+indicatif = { version = "0.17.9", features = ["rayon"] }
+itertools = "0.13.0"
+rayon = "1.10.0"
+rustc-hash = "2.1.0"
