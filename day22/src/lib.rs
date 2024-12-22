@@ -3,7 +3,7 @@ use rayon::prelude::*;
 use fixedbitset::FixedBitSet;
 
 const SIZE: usize = 130_321;
-const CHUNK_SIZE: usize = 550;
+const CHUNK_SIZE: usize = 2256 / 20;
 
 fn step(mut x: u64) -> u64 {
     x = x ^ (x << 6) & 0xffffff;
