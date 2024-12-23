@@ -102,7 +102,7 @@ fn solve_part2(input: &str) -> &str {
         .filter(|&(x, y)| x < SIDE && y < SIDE)
         .any(|(x, y)| visited.contains(pos2idx(x, y)))
         {
-            queue.push_back((x as u8, y as u8));
+            queue.push_back((x, y));
         }
     }
 }

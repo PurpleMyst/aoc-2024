@@ -27,7 +27,7 @@ pub fn solve() -> (impl Display, impl Display) {
         for (x, cell) in row.bytes().enumerate() {
             match cell {
                 b'E' => end = (y as u8, x as u8),
-                b'#' => walls.insert(usize::from(y) * usize::from(side) + usize::from(x)),
+                b'#' => walls.insert(y * usize::from(side) + x),
                 b'S' | b'.' | b'\n' => (),
                 _ => unreachable!("{cell:?}"),
             }

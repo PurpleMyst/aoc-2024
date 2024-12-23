@@ -52,15 +52,15 @@ fn calculate_move(keypad: Keypad, initial_position: (u8, u8), target_position: (
 
     let first_vert =
         (delta_x != 0 && keypad[target_position.0 as usize][initial_position.1 as usize] != b' ').then(|| {
-            repeat_n(b_vert, delta_y.abs() as usize)
-                .chain(repeat_n(b_horiz, delta_x.abs() as usize))
+            repeat_n(b_vert, delta_y.unsigned_abs() as usize)
+                .chain(repeat_n(b_horiz, delta_x.unsigned_abs() as usize))
                 .chain(once(b'A'))
                 .collect()
         });
 
     let first_horiz = (keypad[initial_position.0 as usize][target_position.1 as usize] != b' ').then(|| {
-        repeat_n(b_horiz, delta_x.abs() as usize)
-            .chain(repeat_n(b_vert, delta_y.abs() as usize))
+        repeat_n(b_horiz, delta_x.unsigned_abs() as usize)
+            .chain(repeat_n(b_vert, delta_y.unsigned_abs() as usize))
             .chain(once(b'A'))
             .collect()
     });
@@ -145,7 +145,7 @@ fn complexity(code: &[u8], k: usize) -> usize {
         - 1;
     let numeric_part = code
         .iter()
-        .filter(|&&b| matches!(b, b'0'..=b'9'))
+        .filter(|&&b| b.is_ascii_digit())
         .fold(0, |acc, &b| acc * 10 + (b - b'0') as usize);
 
     len * numeric_part
