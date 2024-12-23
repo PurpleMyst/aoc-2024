@@ -85,7 +85,7 @@ fn solve_part2(input: &str) -> &str {
                 .into_iter()
                 .filter(|&(x, y)| x < SIDE && y < SIDE)
                 .filter(|&(x, y)| !walls.contains(pos2idx(x, y)))
-                .filter(|&(x, y)| !visited.contains(pos2idx(x, y)))
+                .filter(|&(x, y)| !visited.contains(pos2idx(x, y))),
             )
         }
 

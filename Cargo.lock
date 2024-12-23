@@ -49,6 +49,7 @@ dependencies = [
  "day20",
  "day21",
  "day22",
+ "day23",
  "iai",
 ]
 
@@ -399,6 +400,14 @@ dependencies = [
  "itertools 0.13.0",
  "rayon",
  "rustc-hash",
+]
+
+[[package]]
+name = "day23"
+version = "0.1.0"
+dependencies = [
+ "fixedbitset 0.5.7",
+ "petgraph",
 ]
 
 [[package]]

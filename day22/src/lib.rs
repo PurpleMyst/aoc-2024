@@ -1,6 +1,6 @@
-use std::fmt::Display;
-use rayon::prelude::*;
 use fixedbitset::FixedBitSet;
+use rayon::prelude::*;
+use std::fmt::Display;
 
 const SIZE: usize = 130_321;
 const CHUNK_SIZE: usize = 2256 / 20;
@@ -51,20 +51,20 @@ impl ChunkResult {
 pub fn solve() -> (impl Display, impl Display) {
     // Collect all lines first
     let lines: Vec<_> = include_str!("input.txt").lines().collect();
-    
+
     // Process in chunks
     let results = lines
         .par_chunks(CHUNK_SIZE)
         .map(|chunk| {
             let mut chunk_result = ChunkResult::new();
-            
+
             for line in chunk {
                 let n = line.parse::<u64>().unwrap();
                 let values: Vec<_> = generator(n).take(2001).collect();
-                
+
                 // Part 1
                 chunk_result.sum += values[values.len() - 1];
-                
+
                 // Part 2
                 let deltas: Vec<_> = values
                     .iter()
