@@ -1,84 +1,61 @@
-use std::{collections::{HashMap, HashSet}, fmt::Display};
+use std::fmt::Display;
 
-use fixedbitset::FixedBitSet;
+use petgraph::prelude::*;
+use rayon::prelude::*;
 
-use petgraph::{algo::tarjan_scc, prelude::*};
-
-fn to_index(node: &str) -> u16 {
-    u16::from_ne_bytes(<[u8; 2]>::try_from(node.as_bytes()).unwrap())
-}
-
-fn bron_kerbosch(
-    g: &HashMap<&'static str, Vec<&'static str>>,
-    r: Vec<&'static str>,
-    mut p: Vec<&'static str>,
-    mut x: Vec<&'static str>,
-) -> Vec<Vec<&'static str>> {
-    if p.is_empty() && x.is_empty() {
-        return vec![r];
-    }
-
-    let mut result = Vec::new();
-
-    while let Some(v) = p.pop() {
-        {
-        let mut r = r.clone();
-        r.push(v);
-
-        let p = p.iter().filter(|&&n| g[v].contains(&n)).copied().collect();
-        let x = x.iter().filter(|&&n| g[v].contains(&n)).copied().collect();
-
-        result.extend(bron_kerbosch(g,r,p,x));
-        }
-
-        x.push(v);
-    }
-
-    result
-}
+type Graph = UnGraph<&'static str, ()>;
 
 #[inline]
 pub fn solve() -> (impl Display, impl Display) {
     let input = include_str!("input.txt");
 
-    let mut adjacency = HashMap::<&str, Vec<&str>>::new();
-    input.lines().for_each(|line| {
-        let (a, b) = line.split_once('-').unwrap();
-        adjacency.entry(a).or_default().push(b);
-        adjacency.entry(b).or_default().push(a);
-    });
+    let graph = UnGraphMap::<&str, ()>::from_edges(input.lines().map(|line| line.split_once('-').unwrap()));
+    let graph = graph.into_graph();
 
-    let mut p1 = 0;
-    let mut considered = FixedBitSet::with_capacity(1 << 16);
+    rayon::join(|| solve_part1(&graph), || solve_part2(&graph))
+}
 
-    for (node, neighbors) in adjacency.iter() {
-        if !node.starts_with('t') {
-            continue;
-        }
-        considered.insert(to_index(node).into());
+fn triangles(graph: &Graph) -> impl Iterator<Item = [NodeIndex; 3]> + '_ {
+    graph
+        .node_indices()
+        .flat_map(move |node| triangles_starting_from(graph, node))
+}
 
-        for (i, alice) in neighbors.iter().enumerate() {
-            if considered.contains(to_index(alice).into()) {
-                continue;
-            }
+fn triangles_starting_from(graph: &Graph, node: NodeIndex) -> impl Iterator<Item = [NodeIndex; 3]> + '_ {
+    graph.neighbors(node).enumerate().flat_map(move |(i, alice)| {
+        graph
+            .neighbors(node)
+            .skip(i + 1)
+            .filter_map(move |bob| graph.contains_edge(alice, bob).then_some([node, alice, bob]))
+    })
+}
 
-            for bob in neighbors.iter().skip(i + 1) {
-                if considered.contains(to_index(bob).into()) {
-                    continue;
-                }
+fn solve_part1(graph: &Graph) -> usize {
+    triangles(graph)
+        .filter(|nodes| {
+            nodes
+                .into_iter()
+                .any(|node| graph.node_weight(*node).unwrap().starts_with("t"))
+        })
+        .count()
+        / 3
+}
 
-                if adjacency[alice].contains(bob) {
-                    p1 += 1;
-                }
-            }
-        }
-    }
+// https://observablehq.com/@jwolondon/advent-of-code-2024-day-23
+fn solve_part2(graph: &Graph) -> String {
+    let counts = (0..graph.node_count())
+        .into_par_iter()
+        .map(|node_idx| {
+            triangles_starting_from(graph, NodeIndex::new(node_idx)).count() as u8
+        })
+        .collect::<Vec<_>>();
 
-    let cliques = bron_kerbosch(&adjacency, Vec::new(), adjacency.keys().copied().collect(), Vec::new());
-    let mut p2_nodes = cliques.into_iter().max_by_key(|v| v.len()).unwrap();
+    let max_size = counts.iter().max().unwrap();
+    let mut p2_nodes = graph
+        .node_indices()
+        .filter(|node| counts[node.index()] == *max_size)
+        .map(|node| *graph.node_weight(node).unwrap())
+        .collect::<Vec<_>>();
     p2_nodes.sort_unstable();
-    let p2 = p2_nodes.join(",");
-
-
-    (p1, p2)
+    p2_nodes.join(",")
 }
