@@ -2,8 +2,11 @@ use std::fmt::Display;
 
 use std::collections::HashMap;
 
+const OUTPUT_BITS: usize = 45;
+
 type Gates = HashMap<&'static str, Gate>;
 
+#[derive(Clone, Copy)]
 enum Gate {
     Constant(bool),
     Xor(&'static str, &'static str),
@@ -12,16 +15,6 @@ enum Gate {
 }
 
 impl Gate {
-    #[must_use]
-    fn has_operands(&self, a: &str, b: &str) -> bool {
-        match self {
-            &Gate::Xor(lhs, rhs) => (lhs, rhs) == (a, b) || (lhs, rhs) == (b, a),
-            &Gate::And(lhs, rhs) => (lhs, rhs) == (a, b) || (lhs, rhs) == (b, a),
-            &Gate::Or(lhs, rhs) => (lhs, rhs) == (a, b) || (lhs, rhs) == (b, a),
-            _ => false,
-        }
-    }
-
     #[must_use]
     fn is_xor(&self) -> bool {
         matches!(self, Self::Xor(..))
@@ -36,6 +29,27 @@ impl Gate {
     fn is_or(&self) -> bool {
         matches!(self, Self::Or(..))
     }
+
+    #[must_use]
+    fn first_operand(&self) -> &str {
+        match self {
+            Self::Xor(lhs, _) | Self::And(lhs, _) | Self::Or(lhs, _) => lhs,
+            _ => "",
+        }
+    }
+
+    #[must_use]
+    fn second_operand(&self) -> &str {
+        match self {
+            Self::Xor(_, rhs) | Self::And(_, rhs) | Self::Or(_, rhs) => rhs,
+            _ => "",
+        }
+    }
+
+    #[must_use]
+    fn has_operand(&self, name: &str) -> bool {
+        self.first_operand() == name || self.second_operand() == name
+    }
 }
 
 fn eval(gates: &Gates, name: &str) -> bool {
@@ -47,78 +61,22 @@ fn eval(gates: &Gates, name: &str) -> bool {
     }
 }
 
-fn show(gates: &Gates, name: &str) -> String {
-    match gates.get(name).unwrap() {
-        Gate::Constant(..) => format!("{name}"),
-        Gate::Xor(lhs, rhs) => format!("({} ^ {})", show(gates, lhs), show(gates, rhs)),
-        Gate::And(lhs, rhs) => format!("({} & {})", show(gates, lhs), show(gates, rhs)),
-        Gate::Or(lhs, rhs) => format!("({} | {})", show(gates, lhs), show(gates, rhs)),
-    }
-}
-
 fn eval_num(gates: &Gates, prefix: char) -> u64 {
-    let n = gates.keys().filter(|k| k.starts_with(prefix)).max().unwrap().strip_prefix(prefix).unwrap().parse::<usize>().unwrap();
+    let n = gates
+        .keys()
+        .filter(|k| k.starts_with(prefix))
+        .max()
+        .unwrap()
+        .strip_prefix(prefix)
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
 
     (0..=n)
         .rev()
         .map(|n| format!("{prefix}{n:02}"))
         .map(|k| eval(&gates, k.as_str()))
         .fold(0u64, |acc, x| (acc << 1) | if x { 1 } else { 0 })
-}
-
-fn expected_for_bit_build(gates: &Gates, n: u64) {
-    let mut carry_in: Option<&str> = None;
-
-    // let xor = |a: &str, b: &str| gates.iter().find(|v| match v.1 {
-    //     &Gate::Xor(lhs, rhs) => (lhs, rhs) == (a, b) || (lhs, rhs) == (b, a),
-    //     _ => false,
-    // }).expect("XOR gate not found").0;
-    // let and = |a: &str, b: &str| gates.iter().find(|v| match v.1 {
-    //     &Gate::And(lhs, rhs) => (lhs, rhs) == (a, b) || (lhs, rhs) == (b, a),
-    //     _ => false,
-    // }).expect("AND gate not found").0;
-    // let or = |a: &str, b: &str| gates.iter().find(|v| match v.1 {
-    //     &Gate::Or(lhs, rhs) => (lhs, rhs) == (a, b) || (lhs, rhs) == (b, a),
-    //     _ => false,
-    // }).expect("OR gate not found").0;
-
-    let xor = |a: &str, b: &str| gates.iter().find(|(_, v)| v.is_xor() && v.has_operands(a, b)).expect(format!("XOR gate not found: {} ^ {}", a, b).as_str()).0;
-    let and = |a: &str, b: &str| gates.iter().find(|(_, v)| v.is_and() && v.has_operands(a, b)).expect(format!("AND gate not found: {} & {}", a, b).as_str()).0;
-    let or = |a: &str, b: &str| gates.iter().find(|(_, v)| v.is_or() && v.has_operands(a, b)).expect(format!("OR gate not found: {} | {}", a, b).as_str()).0;
-
-    // let x = |i| format!("x{i:02}");
-    // let y = |i| format!("y{i:02}");
-    fn x(i: u64) -> String {
-        format!("x{i:02}")
-    }
-    fn y(i: u64) -> String {
-        format!("y{i:02}")
-    }
-
-    for i in 0..=n {
-        let bit = 
-            if let Some(ref carry) = carry_in {
-                xor(dbg!(xor(&x(i), &y(i))), carry)
-            } else {
-                xor(&x(i), &y(i))
-            };
-        if !bit.starts_with("z") {
-            panic!("Unexpected bit name {bit:?}, should be z{i:02}");
-        }
-
-        let carry = 
-            if let Some(ref carry_in) = carry_in {
-                or(dbg!(and(&x(i), &y(i))), dbg!(and(carry_in, dbg!(xor(&x(i), &y(i))))))
-            } else {
-                and(&x(i), &y(i))
-            };
-
-        println!("z{i:02} = {}", bit);
-        println!("c{i:02} = {}", carry);
-        println!();
-
-        carry_in = Some(carry);
-    }
 }
 
 #[inline]
@@ -134,31 +92,59 @@ pub fn solve() -> (impl Display, impl Display) {
             let lhs = it.next().unwrap();
             let op = it.next().unwrap();
             let rhs = it.next().unwrap();
-            gates.insert(dst, match op {
-                "AND" => Gate::And(lhs, rhs),
-                "OR" => Gate::Or(lhs, rhs),
-                "XOR" => Gate::Xor(lhs, rhs),
-                _ => panic!("Unknown operator: {}", op),
-            });
+            gates.insert(
+                dst,
+                match op {
+                    "AND" => Gate::And(lhs, rhs),
+                    "OR" => Gate::Or(lhs, rhs),
+                    "XOR" => Gate::Xor(lhs, rhs),
+                    _ => panic!("Unknown operator: {}", op),
+                },
+            );
         }
     });
 
-    let p1 = eval_num(&gates, 'z');
+    rayon::join(|| eval_num(&gates, 'z'), || find_swaps(&gates))
+}
 
-    let x = eval_num(&gates, 'x');
-    let y = eval_num(&gates, 'y');
+// Originally I solved this, as can be seen in commit abede62, by manually building the "expected" forms of the gates,
+// and panick-ing if they couldn't be built (i.e. a XOR was missing, something that matched a zNN bit wasn't called zNN,
+// et cetera), which worked to get a solution. This is u/lscddit's solution, which is much more elegant and general.
+fn find_swaps(gates: &HashMap<&str, Gate>) -> String {
+    let mut wrong = Vec::with_capacity(8);
+    let is_xyz = |s: &str| s.starts_with('x') || s.starts_with('y') || s.starts_with('z');
 
-    println!("{x:046b} + {y:046b} = {:048b}", p1 ^ (x + y));
+    for (&dst, &gate) in gates {
+        if dst.starts_with('z') && dst != format!("z{OUTPUT_BITS:02}") && !gate.is_xor() {
+            wrong.push(dst);
+        }
 
-    dbg!(eval_num(&gates, 'x'));
-    dbg!(eval_num(&gates, 'y'));
+        if gate.is_xor() && !is_xyz(&dst) && !is_xyz(gate.first_operand()) && !is_xyz(gate.second_operand()) {
+            wrong.push(dst);
+        }
 
-    expected_for_bit_build(&gates, 44);
+        if gate.is_and() && !gate.has_operand("x00") {
+            for (_, sub_gate) in gates {
+                if !sub_gate.is_or() && sub_gate.has_operand(dst) {
+                    wrong.push(dst);
+                    break;
+                }
+            }
+        }
 
-    for n in 0..=45 {
-        println!("z{n:02} = {}", show(&gates, format!("z{n:02}").as_str()));
-        println!();
+        if gate.is_xor() {
+            for (_, sub_gate) in gates {
+                if sub_gate.is_or() && sub_gate.has_operand(dst) {
+                    wrong.push(dst);
+                    break;
+                }
+            }
+        }
     }
 
-    (p1, "TODO")
+    wrong.sort_unstable();
+    wrong.dedup();
+
+    let p2 = wrong.join(",");
+    p2
 }

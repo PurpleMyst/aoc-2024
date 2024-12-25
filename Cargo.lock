@@ -415,6 +415,9 @@ dependencies = [
 [[package]]
 name = "day24"
 version = "0.1.0"
+dependencies = [
+ "rayon",
+]
 
 [[package]]
 name = "deprecate-until"
