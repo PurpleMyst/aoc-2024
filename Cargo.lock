@@ -50,6 +50,7 @@ dependencies = [
  "day21",
  "day22",
  "day23",
+ "day24",
  "iai",
 ]
 
@@ -410,6 +411,10 @@ dependencies = [
  "petgraph",
  "rayon",
 ]
+
+[[package]]
+name = "day24"
+version = "0.1.0"
 
 [[package]]
 name = "deprecate-until"
