@@ -2,16 +2,21 @@ use std::fmt::Display;
 
 use std::collections::HashMap;
 
-const OUTPUT_BITS: usize = 45;
+const OUTPUT_BITS: u8 = 45;
 
-type Gates = HashMap<&'static str, Gate>;
+type Name = [u8; 3];
+type Gates = HashMap<Name, Gate>;
+
+fn make_name(prefix: u8, suffix: u8) -> Name {
+    [prefix, b'0' + suffix / 10, b'0' + suffix % 10]
+}
 
 #[derive(Clone, Copy)]
 enum Gate {
     Constant(bool),
-    Xor(&'static str, &'static str),
-    And(&'static str, &'static str),
-    Or(&'static str, &'static str),
+    Xor(Name, Name),
+    And(Name, Name),
+    Or(Name, Name),
 }
 
 impl Gate {
@@ -31,51 +36,41 @@ impl Gate {
     }
 
     #[must_use]
-    fn first_operand(&self) -> &str {
+    fn first_operand(&self) -> Name {
         match self {
-            Self::Xor(lhs, _) | Self::And(lhs, _) | Self::Or(lhs, _) => lhs,
-            _ => "",
+            Self::Xor(lhs, _) | Self::And(lhs, _) | Self::Or(lhs, _) => *lhs,
+            _ => [0,0,0],
         }
     }
 
     #[must_use]
-    fn second_operand(&self) -> &str {
+    fn second_operand(&self) -> Name {
         match self {
-            Self::Xor(_, rhs) | Self::And(_, rhs) | Self::Or(_, rhs) => rhs,
-            _ => "",
+            Self::Xor(_, rhs) | Self::And(_, rhs) | Self::Or(_, rhs) => *rhs,
+            _ => [0,0,0],
         }
     }
 
     #[must_use]
-    fn has_operand(&self, name: &str) -> bool {
+    fn has_operand(&self, name: Name) -> bool {
         self.first_operand() == name || self.second_operand() == name
     }
 }
 
-fn eval(gates: &Gates, name: &str) -> bool {
-    match gates.get(name).unwrap() {
+fn eval(gates: &Gates, name: Name) -> bool {
+    match gates.get(&name).unwrap() {
         Gate::Constant(val) => *val,
-        Gate::Xor(lhs, rhs) => eval(gates, lhs) ^ eval(gates, rhs),
-        Gate::And(lhs, rhs) => eval(gates, lhs) & eval(gates, rhs),
-        Gate::Or(lhs, rhs) => eval(gates, lhs) | eval(gates, rhs),
+        Gate::Xor(lhs, rhs) => eval(gates, *lhs) ^ eval(gates, *rhs),
+        Gate::And(lhs, rhs) => eval(gates, *lhs) & eval(gates, *rhs),
+        Gate::Or(lhs, rhs) => eval(gates, *lhs) | eval(gates, *rhs),
     }
 }
 
-fn eval_num(gates: &Gates, prefix: char) -> u64 {
-    let n = gates
-        .keys()
-        .filter(|k| k.starts_with(prefix))
-        .max()
-        .unwrap()
-        .strip_prefix(prefix)
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
-
-    (0..=n)
+fn eval_num(gates: &Gates, prefix: u8) -> u64 {
+    (0..=OUTPUT_BITS)
         .rev()
-        .map(|n| format!("{prefix}{n:02}"))
-        .map(|k| eval(&gates, k.as_str()))
+        .map(|n| make_name(prefix, n))
+        .map(|k| eval(&gates, k))
         .fold(0u64, |acc, x| (acc << 1) | if x { 1 } else { 0 })
 }
 
@@ -85,13 +80,16 @@ pub fn solve() -> (impl Display, impl Display) {
     include_str!("input.txt").lines().for_each(|line| {
         if line.contains(":") {
             let (dst, val) = line.split_once(": ").unwrap();
+            let dst = dst.as_bytes().try_into().unwrap();
             gates.insert(dst, Gate::Constant(val == "1"));
         } else if line.contains(" -> ") {
             let (operands, dst) = line.split_once(" -> ").unwrap();
+            let dst = dst.as_bytes().try_into().unwrap();
             let mut it = operands.split(' ');
-            let lhs = it.next().unwrap();
+            let lhs = it.next().unwrap().as_bytes().try_into().unwrap();
             let op = it.next().unwrap();
-            let rhs = it.next().unwrap();
+            let rhs = it.next().unwrap().as_bytes().try_into().unwrap();
+
             gates.insert(
                 dst,
                 match op {
@@ -104,26 +102,26 @@ pub fn solve() -> (impl Display, impl Display) {
         }
     });
 
-    rayon::join(|| eval_num(&gates, 'z'), || find_swaps(&gates))
+    rayon::join(|| eval_num(&gates, b'z'), || find_swaps(&gates))
 }
 
 // Originally I solved this, as can be seen in commit abede62, by manually building the "expected" forms of the gates,
 // and panick-ing if they couldn't be built (i.e. a XOR was missing, something that matched a zNN bit wasn't called zNN,
 // et cetera), which worked to get a solution. This is u/lscddit's solution, which is much more elegant and general.
-fn find_swaps(gates: &HashMap<&str, Gate>) -> String {
+fn find_swaps(gates: &Gates) -> String {
     let mut wrong = Vec::with_capacity(8);
-    let is_xyz = |s: &str| s.starts_with('x') || s.starts_with('y') || s.starts_with('z');
+    let is_xyz = |s: Name| matches!(s, [b'x', ..] | [b'y', ..] | [b'z', ..]);
 
     for (&dst, &gate) in gates {
-        if dst.starts_with('z') && dst != format!("z{OUTPUT_BITS:02}") && !gate.is_xor() {
+        if dst[0] == b'z' && dst != make_name(b'z', OUTPUT_BITS) && !gate.is_xor() {
             wrong.push(dst);
         }
 
-        if gate.is_xor() && !is_xyz(&dst) && !is_xyz(gate.first_operand()) && !is_xyz(gate.second_operand()) {
+        if gate.is_xor() && !is_xyz(dst) && !is_xyz(gate.first_operand()) && !is_xyz(gate.second_operand()) {
             wrong.push(dst);
         }
 
-        if gate.is_and() && !gate.has_operand("x00") {
+        if gate.is_and() && !gate.has_operand(*b"x00") {
             for (_, sub_gate) in gates {
                 if !sub_gate.is_or() && sub_gate.has_operand(dst) {
                     wrong.push(dst);
@@ -145,6 +143,11 @@ fn find_swaps(gates: &HashMap<&str, Gate>) -> String {
     wrong.sort_unstable();
     wrong.dedup();
 
-    let p2 = wrong.join(",");
-    p2
+    wrong
+        .into_iter()
+        .map(|name| {
+            String::from_utf8(name.to_vec()).unwrap()
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
